@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lượt truy cập – PDF Editor</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; margin: 0; background: #f4f5f7; color: #222; }
+  header { background: #b30b00; color: #fff; padding: 14px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; flex: 1; }
+  header button { background: #fff; color: #b30b00; border: 0; border-radius: 6px; padding: 6px 14px; font-weight: 600; cursor: pointer; }
+  main { padding: 16px 20px; max-width: 1200px; margin: auto; }
+  .note { color: #666; font-size: 13px; margin-bottom: 14px; }
+  .cards { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 8px; padding: 12px 16px; box-shadow: 0 1px 3px #0002; min-width: 150px; }
+  .card b { display: block; font-size: 24px; }
+  .card span { color: #666; font-size: 13px; }
+  h2 { font-size: 15px; margin: 18px 0 8px; }
+  .wrap { overflow-x: auto; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px #0002; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eee; white-space: nowrap; }
+  th { background: #fafafa; position: sticky; top: 0; }
+  td.ua { white-space: normal; color: #888; font-size: 11px; max-width: 360px; }
+  .empty { padding: 30px; text-align: center; color: #888; }
+  input { padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; width: 220px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ai đã vào PDF Editor qua link Internet</h1>
+  <input id="q" placeholder="Lọc theo IP / thiết bị...">
+  <button id="reload">↻ Làm mới</button>
+</header>
+<main>
+  <div class="note">Trang này chỉ mở được trên máy của anh (http://localhost:3300/truy-cap) — người vào bằng link Internet không xem được. Chỉ ghi các lượt mở qua link chia sẻ, không ghi lượt anh mở trên máy này.</div>
+  <div class="cards">
+    <div class="card"><b id="cTotal">0</b><span>Tổng lượt vào</span></div>
+    <div class="card"><b id="cIp">0</b><span>Địa chỉ IP khác nhau</span></div>
+    <div class="card"><b id="cToday">0</b><span>Lượt hôm nay</span></div>
+  </div>
+  <h2>Theo địa chỉ IP</h2>
+  <div class="wrap"><table><thead><tr><th>IP</th><th>Số lượt</th><th>Lần đầu</th><th>Lần cuối</th><th>Thiết bị</th></tr></thead><tbody id="byIp"></tbody></table></div>
+  <h2>Chi tiết từng lượt (mới nhất trước)</h2>
+  <div class="wrap"><table><thead><tr><th>Thời gian</th><th>IP</th><th>Trang</th><th>Thiết bị</th><th>Ngôn ngữ</th><th>Trình duyệt (đầy đủ)</th></tr></thead><tbody id="list"></tbody></table></div>
+</main>
+<script>
+function device(ua) {
+  let os = /Android/i.test(ua) ? 'Android' : /iPhone/i.test(ua) ? 'iPhone' : /iPad/i.test(ua) ? 'iPad' : /Windows/i.test(ua) ? 'Windows' : /Mac OS X/i.test(ua) ? 'Mac' : /Linux/i.test(ua) ? 'Linux' : '?';
+  let br = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /CocCoc/i.test(ua) ? 'Cốc Cốc' : /Zalo/i.test(ua) ? 'Zalo' : /FBAN|FBAV/.test(ua) ? 'Facebook' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : (ua ? ua.split(' ')[0] : '?');
+  return os + ' · ' + br;
+}
+const fmt = t => new Date(t).toLocaleString('vi-VN');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let data = [];
+function render() {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const rows = data.filter(r => !q || (r.ip + ' ' + device(r.ua) + ' ' + r.ua).toLowerCase().includes(q));
+  const today = new Date().toDateString();
+  document.getElementById('cTotal').textContent = rows.length;
+  document.getElementById('cToday').textContent = rows.filter(r => new Date(r.t).toDateString() === today).length;
+  const by = new Map();
+  for (const r of rows) {
+    const g = by.get(r.ip) || { ip: r.ip, n: 0, first: r.t, last: r.t, dev: new Set() };
+    g.n++; if (r.t < g.first) g.first = r.t; if (r.t > g.last) g.last = r.t; g.dev.add(device(r.ua)); by.set(r.ip, g);
+  }
+  document.getElementById('cIp').textContent = by.size;
+  const groups = [...by.values()].sort((a, b) => b.last.localeCompare(a.last));
+  document.getElementById('byIp').innerHTML = groups.length ? groups.map(g => `<tr><td>${esc(g.ip)}</td><td>${g.n}</td><td>${fmt(g.first)}</td><td>${fmt(g.last)}</td><td>${esc([...g.dev].join(', '))}</td></tr>`).join('') : '<tr><td colspan="5" class="empty">Chưa có ai vào qua link Internet.</td></tr>';
+  document.getElementById('list').innerHTML = rows.length ? rows.slice().reverse().map(r => `<tr><td>${fmt(r.t)}</td><td>${esc(r.ip)}</td><td>${esc(r.page)}</td><td>${esc(device(r.ua))}</td><td>${esc(r.lang)}</td><td class="ua">${esc(r.ua)}</td></tr>`).join('') : '<tr><td colspan="6" class="empty">Chưa có lượt nào.</td></tr>';
+}
+async function load() {
+  try { data = await (await fetch('truy-cap.json', { cache: 'no-store' })).json(); } catch (e) { data = []; }
+  try { localStorage.setItem('visitSeen', new Date().toISOString()); } catch (e) {} // nút trên web hết báo "lượt mới"
+  render();
+}
+document.getElementById('reload').onclick = load;
+document.getElementById('q').oninput = render;
+load(); setInterval(load, 30000);
+</script>
+</body>
+</html>

@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hướng dẫn sử dụng — PDF Editor</title>
+<style>
+  :root { --text: #1f2328; --muted: #5f6670; --line: #e3e6ea; --bg: #f6f7f9; --panel: #fff; --accent: #d93025; --blue: #1a73e8; --sel: #e8f0fe; --tip: #fff8e1; --warn: #fdecea; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; font: 15px/1.65 "Segoe UI", Arial, sans-serif; color: var(--text); background: var(--bg); }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .logo { background: var(--accent); color: #fff; font-weight: 800; font-size: 11px; padding: 5px 6px; border-radius: 6px; }
+  header b { font-size: 16px; }
+  header .sp { flex: 1; }
+  header a.btn { border: 1px solid var(--line); border-radius: 8px; padding: 5px 12px; color: var(--text); }
+  header a.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .wrap { display: flex; max-width: 1180px; margin: 0 auto; }
+  nav.toc { position: sticky; top: 52px; align-self: flex-start; width: 250px; max-height: calc(100vh - 52px); overflow-y: auto; padding: 22px 10px 40px 20px; font-size: 13.5px; }
+  nav.toc b { display: block; margin: 0 0 8px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  nav.toc a { display: block; padding: 3px 8px; border-radius: 6px; color: var(--text); }
+  nav.toc a:hover { background: var(--sel); text-decoration: none; }
+  nav.toc a.sub { padding-left: 20px; color: var(--muted); font-size: 13px; }
+  main { flex: 1; min-width: 0; padding: 22px 24px 80px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px 26px 18px; margin-bottom: 18px; }
+  h1 { font-size: 26px; margin: 10px 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 18px; }
+  h2 { font-size: 20px; margin: 18px 0 8px; padding-top: 4px; }
+  h3 { font-size: 16px; margin: 18px 0 6px; }
+  p { margin: 6px 0 10px; }
+  ol, ul { margin: 6px 0 12px; padding-left: 24px; }
+  li { margin: 3px 0; }
+  .k { display: inline-block; min-width: 22px; padding: 0 6px; border: 1px solid #c9ced4; border-bottom-width: 2px; border-radius: 5px; background: #fafbfc; font: 12.5px/20px Consolas, monospace; text-align: center; white-space: nowrap; }
+  .t { display: inline-block; padding: 0 7px; border-radius: 6px; background: var(--sel); color: var(--blue); font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+  .box { border-radius: 10px; padding: 10px 14px; margin: 10px 0 14px; font-size: 14px; }
+  .tip { background: var(--tip); border-left: 4px solid #f9ab00; }
+  .warn { background: var(--warn); border-left: 4px solid var(--accent); }
+  .note { background: var(--sel); border-left: 4px solid var(--blue); }
+  .box b:first-child { display: block; margin-bottom: 2px; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: #f1f3f5; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin: 10px 0 14px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+  .card .ic { font-size: 20px; }
+  .card b { display: block; margin: 2px 0; }
+  .muted { color: var(--muted); }
+  .top { float: right; font-size: 12.5px; margin-top: 22px; }
+  @media (max-width: 860px) { nav.toc { display: none; } main { padding: 14px 12px 60px; } section { padding: 4px 16px 14px; } }
+  @media print {
+    header, nav.toc, .top { display: none !important; }
+    body { background: #fff; font-size: 12.5px; }
+    main { padding: 0; }
+    section { border: none; padding: 0; margin: 0 0 10px; page-break-inside: auto; }
+    h2 { page-break-after: avoid; }
+    a { color: var(--text); }
+  }
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+</head>
+<body>
+<header>
+  <span class="logo">PDF</span><b>PDF Editor</b><span class="muted">— Hướng dẫn sử dụng</span>
+  <span class="sp"></span>
+  <a class="btn" href="javascript:print()" title="In hoặc lưu hướng dẫn thành file PDF">🖨 In / Lưu PDF</a>
+  <a class="btn primary" href="./">Mở ứng dụng</a>
+</header>
+
+<div class="wrap">
+<nav class="toc">
+  <b>Mục lục</b>
+  <a href="#gioi-thieu">1. Giới thiệu</a>
+  <a href="#bat-dau">2. Bắt đầu: mở, lưu, in</a>
+  <a href="#giao-dien">3. Giao diện</a>
+  <a href="#nhieu-file">4. Làm việc với nhiều file</a>
+  <a href="#chon">5. Chọn đối tượng &amp; chọn chữ</a>
+  <a href="#sua-noi-dung">6. Sửa nội dung có sẵn</a>
+  <a class="sub" href="#sua-chu">Sửa chữ</a>
+  <a class="sub" href="#sua-anh">Sửa ảnh, logo</a>
+  <a class="sub" href="#sua-bang">Đường kẻ, bảng, hình vẽ</a>
+  <a class="sub" href="#tay-anh">Tẩy ảnh (hình mờ trong ảnh nền)</a>
+  <a href="#scan">7. File scan: nhận dạng chữ (OCR)</a>
+  <a href="#them">8. Thêm nội dung mới</a>
+  <a href="#thuoc-tinh">9. Thuộc tính &amp; thứ tự lớp</a>
+  <a href="#copy">10. Sao chép, dán (cùng trang, trang khác, file khác)</a>
+  <a href="#trang">11. Quản lý trang</a>
+  <a href="#hinh-mo">12. Hình mờ &amp; lớp ẩn</a>
+  <a href="#cong-cu">12a. Công cụ thêm (số trang, tách file, nén, mật khẩu…)</a>
+  <a href="#phim-tat">13. Phím tắt</a>
+  <a href="#luu-y">14. Lưu ý &amp; giới hạn</a>
+  <a href="#hoi-dap">15. Hỏi đáp nhanh</a></nav>
+
+<main>
+<section id="gioi-thieu">
+  <h1>Hướng dẫn sử dụng PDF Editor</h1>
+  <p class="lead">Ứng dụng chỉnh sửa PDF chạy ngay trên trình duyệt Chrome — sửa chữ, ảnh, bảng có sẵn, thêm chữ ký, ghép / tách trang, nhận dạng chữ trên file scan.</p>
+  <p class="muted" style="font-size:13px;margin-top:-10px">Cập nhật lần cuối: 20/11/2026</p>
+  <h2>1. Giới thiệu</h2>
+  <div class="grid">
+    <div class="card"><span class="ic">✎</span><b>Sửa nội dung có sẵn</b>Chữ (giữ nguyên phông, cỡ, màu, căn lề), ảnh, logo, đường kẻ, bảng.</div>
+    <div class="card"><span class="ic">🔍</span><b>Sửa file scan</b>Nhận dạng chữ tiếng Việt (OCR) rồi sửa từng dòng, từng ô bảng.</div>
+    <div class="card"><span class="ic">T</span><b>Thêm nội dung</b>Chữ tiếng Việt, tô sáng, vẽ, khung, mũi tên, ảnh, chữ ký.</div>
+    <div class="card"><span class="ic">⧉</span><b>Quản lý trang</b>Xoay, xoá, sắp xếp, nhân bản, ghép nhiều PDF, trích trang, xuất ảnh.</div>
+    <div class="card"><span class="ic">⎘</span><b>Copy giữa các file</b>Mở nhiều file cùng lúc, copy chữ / vùng / trang qua lại.</div>
+    <div class="card"><span class="ic">💧</span><b>Hình mờ &amp; lớp ẩn</b>Xoá hình mờ, hiện logo / nội dung đang bị ẩn.</div>
+  </div>
+  <div class="box note"><b>File của bạn ở đâu?</b>File PDF được xử lý ngay trong trình duyệt trên máy bạn — không tải lên máy chủ. Máy chủ chỉ cung cấp ứng dụng và phông chữ.</div>
+  <p><b>Địa chỉ mở ứng dụng:</b></p>
+  <ul>
+    <li>Trên máy cài đặt: <code>http://localhost:3300</code></li>
+    <li>Từ máy khác / qua Internet: link chia sẻ do quản trị cung cấp (dạng <code>https://…ts.net:10000/</code>).</li>
+  </ul>
+  <p class="muted">Nên dùng Google Chrome hoặc Microsoft Edge bản mới. Cần Internet để tải thư viện khi mở trang lần đầu.</p>
+</section>
+
+<section id="bat-dau">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>2. Bắt đầu: mở, lưu, in</h2>
+  <h3>Mở file</h3>
+  <ul>
+    <li>Bấm <span class="t">Mở</span> (hoặc <span class="k">Ctrl</span>+<span class="k">O</span>) và chọn file PDF.</li>
+    <li>Hoặc <b>kéo thả</b> file PDF vào cửa sổ ứng dụng.</li>
+    <li>Mở <b>ảnh JPG / PNG</b> sẽ tạo thành file PDF (mỗi ảnh một trang).</li>
+    <li><span class="t">Mới</span> tạo tài liệu trắng khổ A4.</li>
+  </ul>
+  <h3>Mở lại file gần đây</h3>
+  <ul>
+    <li>Bấm <span class="t">Gần đây</span> (cạnh nút Mở) hoặc xem danh sách <b>File gần đây</b> ở màn hình trống: 10 file mở / lưu gần nhất, kể cả file trên ổ mạng (G:…). Bấm tên file là mở lại.</li>
+    <li>Lần đầu mở lại mỗi phiên, Chrome hỏi <b>"Cho phép xem file?"</b> → bấm <b>Cho phép</b>.</li>
+    <li>Rê chuột lên một dòng, bấm <b>×</b> để bỏ khỏi danh sách; <b>Xoá danh sách</b> để xoá hết. Danh sách chỉ lưu trên máy này.</li>
+    <li>File mở bằng nút <span class="t">Mở</span>, kéo thả, hoặc vừa <span class="t">Lưu</span> đều được nhớ. Cần dùng Chrome hoặc Edge.</li>
+  </ul>
+  <h3>Tự lưu bản nháp</h3>
+  <p>Khi đang sửa mà chưa bấm Lưu, web <b>tự lưu bản nháp</b> trên máy vài giây sau mỗi thay đổi. Lỡ đóng tab, trình duyệt bị tắt hay mất điện: mở lại web sẽ hiện thanh vàng <b>"Có bản đang sửa dở chưa lưu"</b> → bấm <b>Khôi phục</b> để mở lại đúng chỗ đang sửa (mỗi file một tab), rồi nhớ bấm <span class="t">Lưu</span>. Bấm <b>Bỏ</b> nếu không cần. Lưu file xong thì bản nháp tự xoá. (Lịch sử hoàn tác không được khôi phục.)</p>
+  <h3>Lưu file</h3>
+  <ul>
+    <li><span class="t">Lưu</span> (<span class="k">Ctrl</span>+<span class="k">S</span>): lần đầu chọn nơi lưu, các lần sau ghi đè lên file đó.</li>
+    <li><span class="k">Shift</span> + bấm <span class="t">Lưu</span> (hoặc <span class="k">Ctrl</span>+<span class="k">Shift</span>+<span class="k">S</span>): lưu thành file khác.</li>
+    <li><span class="t">Tải xuống</span>: tải file PDF đã sửa về thư mục Downloads.</li>
+    <li><span class="t">In</span>: mở bản PDF đã sửa trong tab mới để in.</li>
+  </ul>
+  <div class="box tip"><b>Mẹo</b>Tên file có dấu chấm đỏ <b>•</b> nghĩa là có thay đổi chưa lưu. Đóng trình duyệt khi chưa lưu sẽ được hỏi lại.</div>
+</section>
+
+<section id="giao-dien">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>3. Giao diện</h2>
+  <table>
+    <tr><th style="width:26%">Khu vực</th><th>Chức năng</th></tr>
+    <tr><td>Thanh trên cùng</td><td>Mới, Mở, In, Tải xuống, Lưu.</td></tr>
+    <tr><td>Thanh tab tài liệu</td><td>Mỗi file đang mở là một tab; bấm để chuyển, <b>×</b> để đóng, <b>＋</b> để mở thêm.</td></tr>
+    <tr><td>Thanh công cụ</td><td>Chọn công cụ làm việc (chọn, sửa, thêm chữ, vẽ…), Hoàn tác / Làm lại, phóng to / thu nhỏ, số trang.</td></tr>
+    <tr><td>Cột trái — Trang</td><td>Các nút thao tác trang, OCR, hình mờ và công cụ thêm (Trang · Nội dung · File).</td></tr>
+    <tr><td>Cột ảnh thu nhỏ</td><td>Ngay cạnh vùng xem trang: ảnh thu nhỏ các trang — bấm để tới trang, kéo thả để sắp xếp, Ctrl / Shift + bấm để chọn nhiều trang.</td></tr>
+    <tr><td>Giữa</td><td>Nội dung trang để xem và sửa.</td></tr>
+    <tr><td>Cột phải — Thuộc tính</td><td>Màu, nền, độ dày nét, phông chữ, cỡ chữ, độ đậm, thứ tự lớp… và gợi ý cho công cụ đang dùng.</td></tr>
+  </table>
+  <p><b>Sắp xếp bố cục</b> (nhóm nút cạnh ô phóng to, góc phải thanh công cụ):</p>
+  <ul>
+    <li><span class="ti ti-columns-2"></span> <b>Xem 2 trang cạnh nhau</b> (1–2, 3–4…) — hợp với bản vẽ khổ ngang nhiều trang; bấm lại để về xem 1 trang cuộn dọc. Trang tự thu vừa 2 trang trên màn hình.</li>
+    <li><span class="ti ti-layout-sidebar"></span> <span class="ti ti-layout-list"></span> <span class="ti ti-layout-sidebar-right"></span> <b>Ẩn / hiện</b> cột nút Trang, cột ảnh thu nhỏ, cột Thuộc tính (nút xanh = đang hiện) — ẩn bớt để vùng xem trang rộng hơn.</li>
+    <li><b>Kéo mép cột</b> (vạch giữa các cột, con trỏ thành ↔) để đổi độ rộng; bấm đúp vào mép để ẩn cột đó.</li>
+    <li><span class="ti ti-restore"></span> trả bố cục về mặc định. Web <b>nhớ cách xếp</b> cho lần mở sau (trên máy / trình duyệt đó).</li>
+  </ul>
+  <p><b>Phóng to / thu nhỏ:</b> nút <span class="t">−</span> <span class="t">＋</span>, nút <span class="t">↔</span> (vừa chiều rộng), hoặc giữ <span class="k">Ctrl</span> + lăn chuột.</p>
+</section>
+
+<section id="nhieu-file">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>4. Làm việc với nhiều file</h2>
+  <ul>
+    <li>Mỗi lần <span class="t">Mở</span> hoặc kéo thả file, file mở trong <b>tab mới</b> — các file cũ vẫn giữ nguyên.</li>
+    <li>Mỗi tab có lịch sử hoàn tác và nút lưu riêng.</li>
+    <li>Muốn <b>gộp</b> file khác vào file đang mở: dùng <span class="t">Ghép PDF</span> (xem <a href="#trang">mục 11</a>).</li>
+  </ul>
+</section>
+
+<section id="chon">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>5. Chọn đối tượng &amp; chọn chữ</h2>
+  <table>
+    <tr><th style="width:24%">Công cụ</th><th>Dùng để</th></tr>
+    <tr><td><span class="t">Chọn đối tượng</span> <span class="k">V</span></td><td>
+      Chọn ảnh, logo, đường kẻ, khung, chữ đã thêm… để <b>di chuyển, đổi cỡ, xoay, xoá</b>.
+      <ul>
+        <li>Bấm 1 lần vào đường kẻ / ảnh / logo có sẵn trong PDF → tách ra và chọn luôn (đường kẻ mảnh chỉ cần bấm gần).</li>
+        <li><b>Kéo khung</b> quanh nhiều thứ (ví dụ cả cái bảng) → chọn tất cả cùng lúc.</li>
+        <li>Bấm đúp vào chữ gốc của PDF → sửa chữ đó.</li>
+      </ul></td></tr>
+    <tr><td><span class="t">I Chọn chữ</span> <span class="k">I</span></td><td>
+      <b>Bôi đen chữ</b> trong PDF để copy (<span class="k">Ctrl</span>+<span class="k">C</span>). Kéo từ khoảng trống cạnh chữ cũng được. Không chọn nhầm ảnh / hình.
+      Chữ copy dán sang file khác trong ứng dụng vẫn giữ phông, cỡ, màu.</td></tr>
+  </table>
+  <p>Khi đã chọn: kéo để di chuyển, kéo góc để đổi cỡ (giữ <span class="k">Shift</span> để co giãn tự do), núm tròn phía trên để xoay, phím mũi tên để nhích 1 điểm (<span class="k">Shift</span> + mũi tên: 10 điểm), <span class="k">Delete</span> để xoá.</p>
+</section>
+
+<section id="sua-noi-dung">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>6. Sửa nội dung có sẵn trong PDF</h2>
+  <p>Chọn công cụ <span class="t">Sửa nội dung</span> (<span class="k">E</span>). Rê chuột lên trang: phần nào sửa được sẽ hiện <b>khung xanh</b>. Bấm vào để sửa.</p>
+  <div class="box note"><b>Thứ tự ưu tiên khi bấm</b>Chữ → đường kẻ / hình vẽ → ảnh. Giữ <span class="k">Alt</span> khi bấm để bỏ qua chữ và chọn hình / ảnh nằm bên dưới chữ.</div>
+
+  <h3 id="sua-chu">Sửa chữ</h3>
+  <ol>
+    <li>Bấm vào dòng chữ cần sửa — con trỏ nằm đúng chỗ bấm.</li>
+    <li>Gõ sửa như bình thường. Bấm ra ngoài để xong.</li>
+  </ol>
+  <ul>
+    <li>Chữ cũ được <b>xoá hẳn</b> khỏi file (không chỉ che lên), nền và đường kẻ phía sau giữ nguyên.</li>
+    <li>Chữ mới giữ đúng <b>phông, cỡ, đậm, nghiêng, màu</b> và <b>căn lề</b> (trái / giữa / phải) như chữ gốc. Chữ xoay dọc (ví dụ số kích thước trên bản vẽ) cũng sửa được.</li>
+    <li>Chữ trong file bị <b>kéo giãn / ép ngang</b> (hay gặp ở khung tên bản vẽ xuất từ AutoCAD) hoặc có <b>khoảng cách chữ</b> riêng: chữ mới giãn đúng như vậy, dòng giữ nguyên bề ngang và vị trí như trước khi sửa.</li>
+    <li><b>Đặt khít, cố định:</b> web so điểm ảnh của chữ gốc và chữ mới rồi dời cho mép trái, mép phải và chân chữ trùng nhau (lệch dưới 0,05 mm), cả trên màn hình lẫn file lưu ra. Ô chữ đã sửa được <b>khoá vị trí</b> — bấm, bôi đen, gõ thoải mái mà không bị kéo lệch.</li>
+    <li>Dòng có <b>nhiều màu</b> (vd một từ màu xanh giữa dòng) giữ đúng màu từng đoạn. Chữ được làm đậm bằng nét viền ("đậm giả") cũng giữ nguyên nét viền.</li>
+    <li>Dùng được cả phông Windows dạng bộ (SimSun, Cambria, Microsoft YaHei, MS Gothic…). Ký tự mà phông gốc không có (vd chữ Việt có dấu trong SimSun) tự dùng Arial cho riêng ký tự đó.</li>
+    <li><b>Phông máy chưa có</b>: nếu là phông miễn phí trên <b>Google Fonts</b> (giấy phép mở, dùng thương mại được), ứng dụng tự tải về khi anh bấm sửa chữ (vài giây, có thông báo "Đã tải phông miễn phí…"). Ngoài ra đã tải sẵn khoảng 60 họ phông phổ biến có tiếng Việt (Roboto, Open Sans, Noto Sans/Serif, Montserrat, Be Vietnam Pro, Lora, Merriweather, Inter…) — có trong ô chọn phông ở cột Thuộc tính — và tự kiểm tra bản mới mỗi tuần. Phông lưu trong thư mục <code>pdf-editor\fonts-extra</code>, không cài vào Windows; chỉ tên phông được gửi lên Google.</li>
+    <li>Phông thương mại (có bản quyền) không tự tải được. Nếu công ty đã mua, cài phông đó vào Windows (bấm phải file phông → Install) rồi khởi động lại máy hoặc ứng dụng, PDF Editor sẽ tự dùng.</li>
+    <li>Mỗi ô của bảng được sửa riêng.</li>
+  </ul>
+  <div class="box tip"><b>Phông chữ</b>Ứng dụng dùng phông đã cài trên máy chủ. Nếu PDF dùng phông máy không có, sẽ tạm dùng Arial và báo cho bạn — có thể đổi phông ở cột Thuộc tính.</div>
+
+  <h3 id="sua-anh">Sửa ảnh, logo</h3>
+  <ol>
+    <li>Bấm vào ảnh (logo, hình…) — ảnh được tách ra đúng vị trí, kích thước.</li>
+    <li>Kéo để di chuyển, kéo góc để đổi cỡ, <span class="k">Delete</span> để xoá.</li>
+  </ol>
+  <p>Cột Thuộc tính có thêm: <span class="t">🖼 Thay ảnh</span> (thay bằng ảnh khác, giữ khung), <span class="t">Lưu ảnh</span> (tải ảnh về máy), <span class="t">🧽 Tẩy vùng trên ảnh</span>.</p>
+
+  <h3 id="sua-bang">Đường kẻ, bảng, khung, hình vẽ</h3>
+  <ul>
+    <li><b>Bấm gần 1 đường kẻ</b> → chọn đúng đường đó. Đổi màu, độ dày ở cột Thuộc tính hoặc xoá.</li>
+    <li><b>Kéo khung quanh cả bảng</b> (bằng <span class="t">Sửa nội dung</span> hoặc <span class="t">Chọn đối tượng</span>) → tách mọi đường kẻ, hình, ảnh trong khung để di chuyển / xoá / copy cả cụm.</li>
+    <li>Hình được tách ra mà trong file gốc nằm <b>dưới chữ</b> (vd nền màu của bảng) sẽ tự giữ ở lớp dưới nội dung PDF, nên bấm nhầm vào nền cũng không làm mất chữ. Muốn đưa lên trên, dùng nút <b>Lên trên cùng</b> ở cột Thuộc tính.</li>
+  </ul>
+
+  <h3 id="tay-anh">Tẩy ảnh — xoá một phần ảnh (ví dụ hình mờ trong ảnh nền)</h3>
+  <p>Nhiều file (hoá đơn điện tử…) có <b>ảnh nền phủ cả trang</b> chứa viền hoa văn và hình mờ. Bấm vào ảnh nền, ứng dụng tự chuyển sang <span class="t">Tẩy ảnh</span>:</p>
+  <ol>
+    <li>Kéo khung lên phần muốn xoá (ví dụ hình mờ ở giữa trang).</li>
+    <li>Phần đó biến mất; viền, chữ, bảng vẫn giữ nguyên. Kéo nhiều lần được.</li>
+    <li>Nhấn <span class="k">Esc</span> để xong; <span class="k">Ctrl</span>+<span class="k">Z</span> để hoàn tác.</li>
+  </ol>
+</section>
+
+<section id="scan">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>7. File scan: nhận dạng chữ (OCR)</h2>
+  <p>File scan / chụp là <b>ảnh</b>, chữ nằm trong ảnh nên phải nhận dạng trước khi sửa.</p>
+  <ol>
+    <li>Bấm <span class="t">Nhận dạng chữ (OCR)</span> ở cột trái: web quét <b>tất cả trang scan của file 1 lần</b> (trang đã có chữ thật hoặc đã nhận dạng thì bỏ qua). Hoặc bấm vào chữ bằng <span class="t">Sửa nội dung</span>, ứng dụng sẽ hỏi có nhận dạng trang đó không.</li>
+    <li>Chờ vài giây / trang (thanh chờ ghi đang quét trang nào). Lần đầu cần Internet để tải dữ liệu tiếng Việt (~10 MB).</li>
+    <li>Quét xong, web ở chế độ <span class="t">Chọn đối tượng</span>: <b>bấm 1 lần vào dòng chữ</b> là sửa được ngay (dùng <span class="t">Sửa nội dung</span> cũng được).</li>
+  </ol>
+  <p>Chữ cũ được che bằng <b>đúng màu giấy</b>. Chữ mới <b>giữ nguyên kiểu chữ của bản scan</b>:</p>
+  <ul>
+    <li><b>Phông chữ</b>: tự nhận ra phông gần giống nhất (Times New Roman, Arial, Calibri, Cambria, Tahoma, Verdana, Segoe UI, Courier New) bằng cách so hình dạng từng từ với bản scan.</li>
+    <li><b>Cỡ chữ, đậm / thường, nghiêng, màu mực</b> và <b>vị trí</b> (cùng chân chữ). Chữ sáng trên nền màu (vd số trắng trong ô xanh) cũng giữ đúng màu chữ và màu nền.</li>
+    <li><b>Độ đậm</b>: phân biệt cả các mức Light / thường / Semibold (nửa đậm) / đậm / Black của Segoe UI, Calibri, Arial. Đậm hay thường được <b>so với các dòng khác trên cùng trang</b> (lần sửa đầu tiên trên mỗi trang mất thêm 1–2 giây để đo), nên bản photocopy nét chữ dày vẫn ra đúng chữ thường; chỉ tiêu đề dày hẳn hơn mới thành chữ đậm.</li>
+    <li><b>Gạch chân</b>: dòng gốc có gạch chân (vd tiêu đề "ĐIỀU 3: …") thì chữ mới cũng có gạch chân.</li>
+    <li><b>Khoảng cách</b>: giãn chữ cho dòng mới dài bằng dòng cũ; chỗ cách 2 dấu cách cũng được giữ.</li>
+    <li><b>Độ nhoè</b>: chữ mới được làm nhoè nhẹ giống chữ trong ảnh scan (khi đang gõ thì hiện nét rõ). Khi lưu PDF, dòng chữ đó được lưu thành ảnh nhỏ cùng độ nét với bản scan.</li>
+    <li><b>Đồng đều trong bảng</b>: các ô số ngắn trên cùng trang tự lấy theo phông, độ đậm, cỡ chữ của các ô đã sửa trước đó.</li>
+  </ul>
+  <p>Gạch chân, đường kẻ bảng và chữ in sẵn màu khác (vd chữ xanh của biểu mẫu) được bỏ qua khi đo nên không làm sai kiểu chữ. Dòng rất ngắn (1–2 từ) khó đoán thì lấy theo phông các dòng khác trên trang. Nếu vẫn chưa đúng ý, chọn ô chữ rồi đổi phông / cỡ ở bảng <b>Thuộc tính</b> bên phải.</p>
+  <div class="box warn"><b>Luôn kiểm tra lại chữ</b>OCR có thể đọc sai, nhất là dấu tiếng Việt (ví dụ "Nguyễn" thành "Nguyên") và chỗ bị con dấu / chữ ký đè (vd "CÔNG TY … GỖ" đọc thành "CONG TY … GO") — đọc lại từng dòng khi sửa. Sửa xong chữ đọc sai, web <b>tự đo lại phông / đậm / nghiêng / cỡ</b> theo chữ đúng trên đúng chỗ đó của bản scan (có thông báo nếu kiểu chữ thay đổi). Chữ đậm (tiêu đề) được so với chữ thường của cả trang và ưu tiên cùng họ phông với chữ thường (vd Times đậm). Chữ viết tay, con dấu, chữ ký không nhận dạng được — dùng <span class="t">Tẩy ảnh</span> hoặc <span class="t">Xoá trắng</span>.</div>
+  <h3>Sửa cả đoạn nhiều dòng</h3>
+  <p>Khi dòng vừa bấm thuộc một đoạn nhiều dòng, bảng nhỏ có nút <b>¶ Sửa cả đoạn (N dòng)</b>. Bấm vào: cả đoạn thành <b>1 ô chữ</b> — gõ thêm / bớt thì <b>chữ tự xuống dòng</b>, căn đều 2 bên như bản gốc (dòng cuối để thường), ngắt dòng ban đầu đúng như bản scan; kéo cạnh khung để đổi độ rộng. Web tự nhận đoạn: các dòng sát nhau, cùng lề trái, dòng trên chạm lề phải; dòng có gạch đầu dòng (–, +, •) là bắt đầu đoạn mới.</p>
+</section>
+
+<section id="them">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>8. Thêm nội dung mới</h2>
+  <table>
+    <tr><th style="width:24%">Công cụ</th><th>Cách dùng</th></tr>
+    <tr><td><span class="t">T Thêm chữ</span> <span class="k">T</span></td><td>Bấm vào vị trí trên trang rồi gõ (tiếng Việt có dấu). <span class="k">Enter</span> để xuống dòng.</td></tr>
+    <tr><td><span class="t">Bút vẽ</span> <span class="k">P</span></td><td>Giữ chuột và vẽ tự do.</td></tr>
+    <tr><td><span class="t">Đo</span> <span class="k">M</span></td><td><b>Đo khoảng cách trên bản vẽ:</b> kéo chuột từ điểm đầu tới điểm cuối → hiện chiều dài (mm), phần ngang và đứng; giữ <span class="k">Shift</span> để đo thẳng ngang / đứng / 45°. Bản vẽ thu nhỏ: đo 1 kích thước đã biết rồi bấm <b>Đặt kích thước thật…</b> (vd đo chiều cao ghế, nhập 808) → web tự tính tỉ lệ cho cả file, các lần đo sau ra kích thước thật; hoặc bấm <b>Tỉ lệ 1:N</b> để nhập tỉ lệ. <b>Ghi lên bản vẽ</b>: vẽ đường đo + số đo (lưu vào file). Phóng to trang để đo chính xác hơn. <span class="k">Esc</span> để thôi.</td></tr>
+    <tr><td><span class="t">Tô sáng</span> <span class="k">H</span></td><td>Kéo chuột qua vùng cần tô sáng.</td></tr>
+    <tr><td><span class="t">Khung</span> <span class="k">R</span> · <span class="t">Elip</span> <span class="k">O</span></td><td>Kéo chuột để vẽ. Giữ <span class="k">Shift</span> để thành hình vuông / tròn.</td></tr>
+    <tr><td><span class="t">Đường</span> <span class="k">L</span> · <span class="t">Mũi tên</span> <span class="k">A</span></td><td>Kéo chuột. Giữ <span class="k">Shift</span> để thẳng góc 45°.</td></tr>
+    <tr><td><span class="t">Xoá trắng</span> <span class="k">W</span></td><td>Kéo khung che phần muốn xoá bằng ô màu (mặc định trắng, đổi màu nền ở cột phải).</td></tr>
+    <tr><td><span class="t">Ảnh</span></td><td>Chọn file ảnh để chèn vào trang đang xem.</td></tr>
+    <tr><td><span class="t">Chữ ký</span></td><td>Vẽ chữ ký bằng chuột → <b>Chèn chữ ký</b>. Chữ ký được lưu lại để lần sau bấm là chèn.</td></tr>
+  </table>
+</section>
+
+<section id="thuoc-tinh">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>9. Thuộc tính &amp; thứ tự lớp</h2>
+  <p>Chọn đối tượng rồi chỉnh ở cột <b>Thuộc tính</b>: màu, màu nền, độ dày nét, phông chữ, cỡ chữ, đậm <b>B</b>, nghiêng <i>I</i>, căn lề, độ đậm (mờ).</p>
+  <h3>Thứ tự lớp (đối tượng nào nằm trên)</h3>
+  <table>
+    <tr><th style="width:24%">Nút</th><th style="width:22%">Phím tắt</th><th>Tác dụng</th></tr>
+    <tr><td>⤒ Lên trên cùng</td><td><span class="k">Ctrl</span>+<span class="k">Shift</span>+<span class="k">]</span></td><td>Nằm trên mọi thứ.</td></tr>
+    <tr><td>↑ Lên 1 lớp</td><td><span class="k">Ctrl</span>+<span class="k">]</span></td><td>Vượt qua đối tượng đang đè lên nó.</td></tr>
+    <tr><td>↓ Xuống 1 lớp</td><td><span class="k">Ctrl</span>+<span class="k">[</span></td><td>Chui xuống dưới đối tượng bên dưới; hết đối tượng thì xuống <b>dưới chữ, bảng của PDF</b>.</td></tr>
+    <tr><td>⤓ Dưới cùng</td><td><span class="k">Ctrl</span>+<span class="k">Shift</span>+<span class="k">[</span></td><td>Nằm dưới chữ, bảng của PDF (nhưng vẫn trên ảnh nền của trang).</td></tr>
+  </table>
+  <p>Dòng chữ xanh trong cột Thuộc tính cho biết đối tượng đang nằm TRÊN hay DƯỚI nội dung PDF.</p>
+  <p><b>Khác:</b> <span class="t">Nhân bản</span> (<span class="k">Ctrl</span>+<span class="k">D</span>), <span class="t">Xoá</span> (<span class="k">Delete</span>), <span class="k">Ctrl</span>+<span class="k">A</span> chọn hết đối tượng trên trang.</p>
+</section>
+
+<section id="copy">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>10. Sao chép, dán (cùng trang, trang khác, file khác)</h2>
+  <h3>Quét chọn rồi dán vào vị trí khác</h3>
+  <ol>
+    <li>Chọn công cụ <span class="t">Chọn đối tượng</span> <span class="k">V</span>, <b>kéo khung</b> quanh phần muốn sao chép (vài ô bảng, khung tên, logo, đoạn chữ, kể cả trên file scan).</li>
+    <li>Nếu trong khung có chữ / ảnh gốc của PDF, hiện <b>khung xanh nét đứt</b> có 2 nút <b>Sao chép</b> và <b>Xoá</b> ở phía trên. <b>Chỉnh khung:</b> kéo 8 nút trắng ở góc / cạnh để khung vừa khít, khỏi phải quét lại. (Ở công cụ Chọn đối tượng, rê chuột không hiện khung xanh nữa.) Nếu chỉ có đối tượng đã thêm / đường kẻ thì chúng được chọn như thường.</li>
+    <li>Bấm nút <b>Sao chép</b> (hoặc <span class="k">Ctrl</span>+<span class="k">C</span>).</li>
+    <li><b>Trỏ chuột vào chỗ muốn dán</b> (cùng trang, trang khác hoặc tab file khác) rồi bấm <span class="k">Ctrl</span>+<span class="k">V</span> — phần dán nằm với <b>góc trên-trái tại con trỏ chuột</b>. Sau đó kéo để chỉnh lại vị trí nếu cần.</li>
+  </ol>
+  <p>Chuột không nằm trên trang nào khi bấm Ctrl+V: dán sang file khác thì giữ <b>đúng vị trí</b> như ở file nguồn, dán cùng trang thì lệch xuống một chút. <span class="k">Esc</span> bỏ khung vùng chọn.</p>
+  <h3>Dời cả vùng sang chỗ khác</h3>
+  <p>Khi đang có khung xanh nét đứt: <b>bấm giữ chuột bên trong khung rồi kéo</b> tới chỗ mới (con trỏ hình mũi tên 4 chiều). Lúc kéo, khung mang theo hình của vùng, chỗ cũ hiện trắng mờ viền đỏ. Thả chuột: mọi thứ trong vùng (chữ, nét vẽ, ảnh, đối tượng đã thêm) <b>chuyển sang chỗ mới</b>, chỗ cũ trống hẳn; khi lưu, phần nội dung gốc vẫn giữ nét vector sắc nét. Khung chọn đi theo vùng nên kéo tiếp được để chỉnh; <span class="k">Ctrl</span>+<span class="k">Z</span> một lần là trả lại như cũ. (Chỉ dời trong cùng trang — sang trang / file khác thì dùng Sao chép + Ctrl+V rồi Xoá chỗ cũ.)</p>
+  <h3>Xoá vùng đã quét chọn</h3>
+  <p><b>Xem trước:</b> rê chuột vào nút <b>Xoá</b> trên khung — vùng sắp mất hiện trắng mờ, viền đỏ, để thấy trước có lấn sang chữ bên cạnh không (chưa xoá gì). Bấm nút <b>Xoá</b>, hoặc <span class="k">Delete</span> / <span class="k">Backspace</span>: mọi thứ trong khung bị <b>xoá hẳn khỏi file</b> (không phủ ô trắng): chữ gốc, nét vẽ / đường kẻ nằm trong khung, phần ảnh gốc trong khung (vd chữ trên bản scan), đối tượng đã thêm. Nét vẽ / ảnh / chữ vắt ngang qua khung bị <b>cắt đúng theo mép khung</b> — trong khung sạch hẳn, phần bên ngoài giữ nguyên. Bấm Delete ngay khi vừa quét cũng được — web xoá khi quét xong. Muốn lấy lại thì bấm <span class="k">Ctrl</span>+<span class="k">Z</span> (một lần là đủ). Lưu ý kéo khung vừa khít phần muốn xoá, tránh lấn sang dòng bên cạnh.</p>
+  <h3>Copy giữa các file</h3>
+  <p>Mở cả 2 file (2 tab). Ở file nguồn chọn rồi <span class="k">Ctrl</span>+<span class="k">C</span> → chuyển sang tab file đích → <span class="k">Ctrl</span>+<span class="k">V</span>.</p>
+  <table>
+    <tr><th style="width:26%">Muốn copy</th><th>Cách chọn ở file nguồn</th></tr>
+    <tr><td>Chữ (giữ định dạng)</td><td>Công cụ <span class="t">I Chọn chữ</span>, bôi đen chữ.</td></tr>
+    <tr><td>Một vùng (hình + chữ)</td><td>Công cụ <span class="t">Copy vùng</span>, kéo khung quanh vùng (khung tên, logo…) — tự copy, không cần Ctrl+C. Khi lưu vẫn là nét vector sắc nét.</td></tr>
+    <tr><td>Đối tượng đã thêm / sửa</td><td><span class="t">Chọn đối tượng</span>, chọn (hoặc <span class="k">Ctrl</span>+<span class="k">A</span> chọn hết trên trang).</td></tr>
+    <tr><td>Cả trang</td><td>Chọn trang ở cột trái → <span class="t">Copy trang</span>; ở file đích bấm <span class="t">Dán trang</span> (chèn sau trang đang xem).</td></tr>
+  </table>
+  <p>Dán chữ / ảnh copy từ chương trình khác (Word, Excel, ảnh chụp màn hình) cũng được: <span class="k">Ctrl</span>+<span class="k">V</span>.</p>
+</section>
+
+<section id="trang">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>11. Quản lý trang</h2>
+  <p>Ở cột trái: bấm ảnh thu nhỏ để chọn trang (<span class="k">Ctrl</span> + bấm: chọn thêm, <span class="k">Shift</span> + bấm: chọn liền dải). Các nút áp dụng cho trang đang chọn (hoặc trang đang xem).</p>
+  <table>
+    <tr><th style="width:26%">Nút</th><th>Tác dụng</th></tr>
+    <tr><td>＋ Trang trắng</td><td>Chèn trang trắng sau trang đang xem.</td></tr>
+    <tr><td>⧉ Nhân bản</td><td>Nhân đôi trang đang chọn.</td></tr>
+    <tr><td>↺ Xoay · ↻ Xoay</td><td>Xoay trái / phải 90° (nội dung đã thêm xoay theo).</td></tr>
+    <tr><td>🗑 Xoá</td><td>Xoá trang đang chọn.</td></tr>
+    <tr><td>⊕ Ghép PDF</td><td>Thêm các trang của file PDF / ảnh khác vào cuối file đang mở.</td></tr>
+    <tr><td>⇱ Trích trang</td><td>Nhập khoảng trang (vd <code>1-3, 5</code>) → tạo file PDF mới chỉ gồm các trang đó.</td></tr>
+    <tr><td>🖼 Xuất PNG</td><td>Lưu trang đang xem thành ảnh PNG.</td></tr>
+    <tr><td>⎘ Copy trang · 📋 Dán trang</td><td>Copy trang sang file khác (xem mục 10).</td></tr>
+  </table>
+  <p><b>Sắp xếp trang:</b> kéo thả ảnh thu nhỏ lên / xuống. Rê chuột lên ảnh thu nhỏ có nút xoay / xoá nhanh.</p>
+</section>
+
+<section id="hinh-mo">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>12. Hình mờ &amp; lớp ẩn</h2>
+  <p>Bấm <span class="t">Hình mờ &amp; lớp ẩn</span> ở cột trái:</p>
+  <ul>
+    <li><b>Hình mờ (watermark) dạng chuẩn:</b> tích "Xoá hình mờ" → xoá trên cả file.</li>
+    <li><b>Lớp nội dung (layer):</b> logo / nội dung bị ẩn thường nằm trong lớp đang <b>Ẩn</b> — chọn <b>Hiện</b> để thấy và sửa; chọn <b>Ẩn</b> để bỏ lớp đó khi lưu.</li>
+  </ul>
+  <p>Hình mờ không theo dạng chuẩn (là ảnh, chữ hoặc nét vẽ thường): dùng <span class="t">Sửa nội dung</span> bấm vào (hoặc kéo khung) rồi <span class="k">Delete</span>; nếu hình mờ nằm trong ảnh nền thì dùng <span class="t">Tẩy ảnh</span>.</p>
+  <p>Bấm <span class="k">Ctrl</span>+<span class="k">Z</span> nếu muốn trở lại như cũ.</p>
+  <p>Muốn <b>thêm</b> hình mờ mới (chữ "BẢN NHÁP", logo…): dùng nút <span class="t">Đóng dấu</span> — xem mục 12a.</p>
+</section>
+
+<section id="cong-cu">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>12a. Công cụ thêm (cột trái: Trang · Nội dung · File)</h2>
+  <p>Rê chuột lên nút để xem giải thích. Các nút mở hộp thoại; ô <b>Áp dụng cho</b> chọn: tất cả trang / trang đang chọn / các trang gõ tay (vd <code>2-5, 8</code>).</p>
+  <table>
+    <tr><th style="width:24%">Nút</th><th>Dùng để</th></tr>
+    <tr><td><span class="t">Số trang</span></td><td>Đánh số trang ("Trang 1/22", "1", "Page 1 of 22"…), chọn vị trí, phông, cỡ, màu, số bắt đầu; có thể bỏ trang bìa. Chạy lại sẽ thay số cũ. Số là chữ thêm vào nên sửa / xoá được.</td></tr>
+    <tr><td><span class="t">Tách file</span></td><td>Chia PDF: mỗi trang 1 file, mỗi N trang 1 file, hoặc theo khoảng (vd <code>1-3; 4-10; 11</code>). Tải về 1 file .zip chứa các phần.</td></tr>
+    <tr><td><span class="t">Cỡ trang</span></td><td>Tự cắt lề trắng (chừa lại vài mm), cắt lề theo số mm, hoặc đổi sang A4 / A3 / A5 / Letter / Legal (nội dung co vừa trang). Trang được dựng lại: chữ / hình đã thêm thành nội dung PDF (vẫn sửa được bằng Sửa nội dung). Ctrl+Z để trở lại.</td></tr>
+    <tr><td><span class="t">Chèn file</span></td><td>Chèn trang từ file PDF / ảnh khác vào <b>ngay sau trang đang xem</b> (khác "Ghép PDF" là ghép vào cuối).</td></tr>
+    <tr><td><span class="t">Đóng dấu</span></td><td>Thêm hình mờ chữ (vd "BẢN NHÁP", "CONFIDENTIAL") hoặc ảnh / logo: chọn phông, cỡ, màu, độ mờ, góc xoay; tích "Nằm dưới nội dung" để không che chữ. Chạy lại sẽ thay hình mờ cũ.</td></tr>
+    <tr><td><span class="t">Đầu / chân</span></td><td>Thêm chữ cố định ở 6 vị trí (trái / giữa / phải của đầu và chân trang). Mã tự thay: <code>{n}</code> số trang, <code>{N}</code> tổng trang, <code>{date}</code> ngày, <code>{file}</code> tên file.</td></tr>
+    <tr><td><span class="t">Tìm &amp; thay</span></td><td>Tìm một từ trong cả file ("Đếm số chỗ") rồi "Thay tất cả". Chữ mới giữ phông, cỡ, màu như chữ gốc. Chữ trong ảnh scan cần OCR trước.</td></tr>
+    <tr><td><span class="t">Che tin</span></td><td>Bấm nút rồi <b>kéo khung</b> lên thông tin cần che (giá, số tài khoản…): chữ và phần ảnh trong khung bị <b>xoá hẳn khỏi file</b> rồi phủ ô đen — người nhận không lấy lại được. <span class="k">Esc</span> để thôi.</td></tr>
+    <tr><td><span class="t">Nén file</span></td><td>Tải về bản nhỏ hơn (đuôi "-nen"): gộp phông / ảnh trùng lặp, nén lại ảnh lớn (3 mức Nhẹ / Vừa / Mạnh). Chữ và nét vẽ vẫn sắc nét.</td></tr>
+    <tr><td><span class="t">Mật khẩu</span></td><td>Tải về bản khoá (đuôi "-khoa"): phải nhập mật khẩu mới mở được; có thể chặn in / sao chép / sửa. Mật khẩu dùng chữ không dấu, số, ký hiệu. <b>Quên mật khẩu thì không mở lại được.</b></td></tr>
+    <tr><td><span class="t">Mục lục</span></td><td>Tạo / sửa mục lục (bookmark) hiện ở cột trái khi mở file bằng Adobe, Edge, Chrome… Mục lục sẵn có trong file được giữ lại. Bấm Lưu để ghi vào file.</td></tr>
+    <tr><td><span class="t">Word/Excel</span></td><td>Xuất chữ ra Word (.docx, theo từng dòng) hoặc Excel (.xlsx, tự tách cột theo khoảng trống, mỗi trang 1 sheet). Ảnh và hình vẽ không chuyển.</td></tr>
+    <tr><td><span class="t">So sánh</span></td><td>So 2 bản PDF (vd bản vẽ trước / sau khi sửa, hợp đồng 2 phiên bản). <b>Không cần mở file kia thành tab:</b> bấm So sánh là hộp chọn file hiện ra ngay — chọn file cần so với bản đang mở (hoặc kéo thả file PDF vào khung so sánh), <b>vùng xem trang tự chia đôi</b> — thanh công cụ, cột Trang và cột Thuộc tính vẫn giữ nguyên; bấm <b>Đóng</b> (hoặc <span class="k">Esc</span>) để trở về trang đang sửa. Muốn đổi thì chọn lại <b>Bản A</b> / <b>Bản B</b>: "Đang sửa: …" (file đang sửa, lấy cả phần chưa lưu), "Đang mở: …" (file khác đang mở), "File chọn: …" (file vừa chọn để so — không mở thành tab) hoặc "Chọn file từ máy…". Kiểu xem <b>Cạnh nhau</b>: 2 bản song song, <b>khung đỏ</b> quanh chỗ khác nhau. Kiểu <b>Chồng lớp</b>: 1 hình — <b style="color:#dc1e1e">đỏ</b> = chỉ có ở bản A (đã bị bỏ), <b style="color:#146ee6">xanh</b> = chỉ có ở bản B (mới thêm), đen = giống nhau. Dòng trên cùng liệt kê các trang có chỗ khác; <b>Trang khác tiếp ▶▶</b> nhảy tới trang khác tiếp theo; phím ← → chuyển trang, <span class="k">Esc</span> đóng. So theo hình ảnh (so được cả bản scan, bản vẽ).<br>
+      <b>Hai bản lệch trang</b> (bản mới chèn thêm hoặc bỏ bớt trang ở giữa): web tự <b>ghép các trang giống nhau</b> với nhau, nên các trang phía sau không bị báo khác hết. Ô trang ghi "A3↔B4" = trang 3 bản A ứng với trang 4 bản B; ô <b>A2</b> = trang bị bỏ (chỉ có ở bản A); ô xanh <b>B3</b> = trang mới thêm ở bản B. Trang sửa quá nhiều có thể bị coi là "bỏ trang cũ + thêm trang mới".<br>
+      <b>Xuất báo cáo PDF:</b> tải về file "So sanh - … vs ….pdf" khổ A3 ngang: trang 1 tóm tắt (tên 2 bản, ngày giờ, bảng các trang khác), mỗi trang sau đặt 2 bản cạnh nhau với <b>khung đỏ đánh số</b> quanh từng chỗ khác (cùng số ở 2 bên là cùng một chỗ) — gửi cho xưởng / khách duyệt.</td></tr>
+  </table>
+  <div class="box note"><b>Dung lượng khi lưu</b>Từ nay khi Lưu / Tải xuống / Trích trang / Tách file, phông và ảnh trùng lặp được gộp tự động, nên file lưu ra nhỏ gần bằng bản gốc.</div>
+</section>
+
+<section id="phim-tat">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>13. Phím tắt</h2>
+  <table>
+    <tr><th>Phím</th><th>Tác dụng</th><th>Phím</th><th>Tác dụng</th></tr>
+    <tr><td><span class="k">V</span></td><td>Chọn đối tượng</td><td><span class="k">Ctrl</span>+<span class="k">O</span></td><td>Mở file</td></tr>
+    <tr><td><span class="k">I</span></td><td>Chọn chữ</td><td><span class="k">Ctrl</span>+<span class="k">S</span></td><td>Lưu</td></tr>
+    <tr><td><span class="k">E</span></td><td>Sửa nội dung</td><td><span class="k">Ctrl</span>+<span class="k">Z</span> / <span class="k">Ctrl</span>+<span class="k">Y</span></td><td>Hoàn tác / Làm lại</td></tr>
+    <tr><td><span class="k">T</span></td><td>Thêm chữ</td><td><span class="k">Ctrl</span>+<span class="k">C</span> / <span class="k">Ctrl</span>+<span class="k">V</span></td><td>Copy / Dán</td></tr>
+    <tr><td><span class="k">P</span></td><td>Bút vẽ</td><td><span class="k">Ctrl</span>+<span class="k">D</span></td><td>Nhân bản đối tượng</td></tr>
+    <tr><td><span class="k">H</span></td><td>Tô sáng</td><td><span class="k">Ctrl</span>+<span class="k">A</span></td><td>Chọn hết đối tượng trên trang</td></tr>
+    <tr><td><span class="k">R</span> / <span class="k">O</span></td><td>Khung / Elip</td><td><span class="k">Delete</span></td><td>Xoá đối tượng đang chọn</td></tr>
+    <tr><td><span class="k">L</span> / <span class="k">A</span></td><td>Đường / Mũi tên</td><td><span class="k">Esc</span></td><td>Về công cụ Chọn, bỏ chọn</td></tr>
+    <tr><td><span class="k">W</span></td><td>Xoá trắng</td><td>Mũi tên</td><td>Nhích đối tượng (Shift: 10 điểm)</td></tr>
+    <tr><td><span class="k">+</span> / <span class="k">−</span></td><td>Phóng to / thu nhỏ</td><td><span class="k">Ctrl</span>+<span class="k">[</span> / <span class="k">]</span></td><td>Xuống / lên 1 lớp</td></tr>
+  </table>
+</section>
+
+<section id="luu-y">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>14. Lưu ý &amp; giới hạn</h2>
+  <div class="box warn"><b>Chứng từ có chữ ký số, con dấu</b>Hoá đơn điện tử, biên bản đã ký: sửa bất kỳ chi tiết nào thì chữ ký số mất hiệu lực và file không còn là bản gốc. Khi dùng cho kế toán, nộp cơ quan hoặc gửi đối tác như chứng từ thật, hãy dùng file gốc.</div>
+  <ul>
+    <li>Ứng dụng cần Internet để tải thư viện khi mở lần đầu và để tải dữ liệu OCR.</li>
+    <li>File có <b>phông nhúng bị hỏng</b> (vd file song ngữ dịch bằng Kingsoft PDF, chữ hiện thành ký tự rác): khi mở, ứng dụng tự thay phông hỏng bằng Arial theo đúng mã chữ trong file và báo "đã tự thay bằng Arial". File lưu ra cũng dùng phông đã sửa nên mở bằng chương trình khác vẫn đúng. Kiểu chữ có thể hơi khác bản gốc.</li>
+    <li>Chữ trong file scan phải nhận dạng (OCR) trước khi sửa; kết quả OCR cần kiểm tra lại.</li>
+    <li>Nền hoa văn lặp lại (pattern), dải màu chuyển sắc chưa tách / sửa riêng được.</li>
+    <li>File có mật khẩu: nhập mật khẩu khi mở; một số file mã hoá có thể lưu không đúng.</li>
+    <li>Ứng dụng không lưu file trên máy chủ — hãy bấm <span class="t">Lưu</span> / <span class="t">Tải xuống</span> trước khi đóng.</li>
+  </ul>
+</section>
+
+<section id="hoi-dap">
+  <a class="top" href="#">↑ Lên đầu</a>
+  <h2>15. Hỏi đáp nhanh</h2>
+  <h3>Bấm vào chữ mà không sửa được?</h3>
+  <p>Kiểm tra đang dùng công cụ <span class="t">Sửa nội dung</span> (hoặc bấm đúp bằng <span class="t">Chọn đối tượng</span>). Nếu rê chuột không hiện khung xanh: chữ đó là nét vẽ hoặc nằm trong ảnh scan → dùng OCR (mục 7) hoặc <span class="t">Xoá trắng</span> + <span class="t">T Thêm chữ</span>.</p>
+  <h3>Đưa logo xuống dưới thì bị mất?</h3>
+  <p>Dùng <b>↓ Xuống 1 lớp</b> hoặc <b>⤓ Dưới cùng</b> — logo nằm dưới chữ nhưng vẫn trên ảnh nền. Nếu vẫn bị che, có thể trang có mảng tô trắng phủ kín: bấm <b>↑ Lên 1 lớp</b>.</p>
+  <h3>Lỡ tay xoá / sửa sai?</h3>
+  <p><span class="k">Ctrl</span>+<span class="k">Z</span> (hoàn tác), <span class="k">Ctrl</span>+<span class="k">Y</span> (làm lại).</p>
+  <h3>Ứng dụng không hiện bản mới nhất?</h3>
+  <p>Nhấn <span class="k">Ctrl</span>+<span class="k">F5</span> để tải lại trang.</p>
+  <h3>In hướng dẫn này?</h3>
+  <p>Bấm <span class="t">In / Lưu PDF</span> ở góc trên, chọn máy in hoặc "Lưu dưới dạng PDF".</p>
+</section>
+</main>
+</div>
+</body>
+</html>

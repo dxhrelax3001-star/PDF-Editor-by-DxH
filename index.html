@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script>/* link ".../pdf" thiếu "/" cuối → chuyển sang ".../pdf/" để tải đúng style/app */ if (!/\/$|\.html$/.test(location.pathname)) location.replace(location.pathname + '/' + location.search + location.hash);</script>
+<title>PDF Editor</title>
+<meta name="description" content="Sửa PDF trực tuyến: sửa chữ, ảnh, bảng, ghép trang, ký tên.">
+<meta property="og:title" content="PDF Editor">
+<meta property="og:site_name" content="PDF Editor">
+<meta property="og:description" content="Sửa PDF trực tuyến: sửa chữ, ảnh, bảng, ghép trang, ký tên.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">PDF</span><b>PDF Editor</b><b class="by">by DxH</b></div>
+  <span id="fname" class="fname"></span>
+  <span class="spacer"></span>
+  <a id="visitLink" href="truy-cap" target="_blank" class="ghost help-link" title="Ai đã vào qua link Internet (chỉ hiện trên máy chủ)" hidden><i class="ico k-gray"><span class="ti ti-eye"></span></i>Lượt truy cập <span id="visitBadge" class="visit-badge" hidden></span></a>
+  <a href="huong-dan.html" target="_blank" class="ghost help-link" title="Hướng dẫn sử dụng (mở tab mới)"><i class="ico k-blue"><span class="ti ti-help"></span></i>Hướng dẫn</a>
+  <button id="btnNew" class="ghost" title="Tạo tài liệu trắng mới"><i class="ico k-blue"><span class="ti ti-file-plus"></span></i>Mới</button>
+  <button id="btnOpen" class="ghost" title="Mở PDF hoặc ảnh (Ctrl+O)"><i class="ico k-amber"><span class="ti ti-folder-open"></span></i>Mở</button>
+  <button id="btnPrint" class="ghost" title="Mở bản PDF đã sửa trong tab mới để in"><i class="ico k-gray"><span class="ti ti-printer"></span></i>In</button>
+  <button id="btnDownload" class="ghost" title="Tải file PDF đã sửa về máy"><i class="ico k-green"><span class="ti ti-download"></span></i>Tải xuống</button>
+  <button id="btnSave" class="primary" title="Lưu (Ctrl+S) · Shift+bấm = Lưu thành file khác"><i class="ico k-on"><span class="ti ti-device-floppy"></span></i>Lưu</button>
+</header>
+
+<div class="doctabs" id="doctabs"></div>
+<nav class="tools" id="tools">
+  <button data-tool="select" title="Chọn đối tượng: ảnh, hình, chữ đã thêm… để di chuyển, đổi cỡ (V)"><i class="ico k-blue"><span class="ti ti-pointer"></span></i><span>Chọn đối tượng</span></button>
+  <button data-tool="textsel" title="Chọn chữ: bôi đen chữ trong PDF để copy (I)"><i class="ico k-blue"><span class="ti ti-cursor-text"></span></i><span>Chọn chữ</span></button>
+  <button data-tool="edittext" title="Sửa chữ / ảnh có sẵn trong PDF: bấm vào dòng chữ hoặc ảnh (E)"><i class="ico k-purple"><span class="ti ti-pencil"></span></i><span>Sửa nội dung</span></button>
+  <button data-tool="text" title="Thêm chữ: bấm vào trang rồi gõ (T)"><i class="ico k-purple"><span class="ti ti-typography"></span></i><span>Thêm chữ</span></button>
+  <button data-tool="draw" title="Bút vẽ tự do (P)"><i class="ico k-coral"><span class="ti ti-brush"></span></i><span>Bút vẽ</span></button>
+  <button data-tool="highlight" title="Tô sáng: kéo chuột thành vùng (H)"><i class="ico k-amber"><span class="ti ti-highlight"></span></i><span>Tô sáng</span></button>
+  <button data-tool="rect" title="Hình chữ nhật (R)"><i class="ico k-teal"><span class="ti ti-square"></span></i><span>Khung</span></button>
+  <button data-tool="ellipse" title="Hình elip (O)"><i class="ico k-teal"><span class="ti ti-circle"></span></i><span>Elip</span></button>
+  <button data-tool="line" title="Đường thẳng — giữ Shift để thẳng góc (L)"><i class="ico k-teal"><span class="ti ti-line"></span></i><span>Đường</span></button>
+  <button data-tool="arrow" title="Mũi tên (A)"><i class="ico k-teal"><span class="ti ti-arrow-up-right"></span></i><span>Mũi tên</span></button>
+  <button data-tool="measure" title="Đo khoảng cách (mm) trên bản vẽ (M)"><i class="ico k-teal"><span class="ti ti-ruler-measure"></span></i><span>Đo</span></button>
+  <button data-tool="whiteout" title="Xoá trắng: che nội dung bằng ô trắng (W)"><i class="ico k-pink"><span class="ti ti-eraser"></span></i><span>Xoá trắng</span></button>
+  <button data-tool="erase" title="Tẩy ảnh: kéo khung để xoá một phần ảnh (vd hình mờ trong ảnh nền)"><i class="ico k-pink"><span class="ti ti-photo-x"></span></i><span>Tẩy ảnh</span></button>
+  <button data-tool="region"title="Copy một vùng (hình + chữ) để dán sang file khác"><i class="ico k-gray"><span class="ti ti-copy"></span></i><span>Copy vùng</span></button>
+  <button id="btnImage" title="Chèn ảnh vào trang hiện tại"><i class="ico k-green"><span class="ti ti-photo"></span></i><span>Ảnh</span></button>
+  <button id="btnSign" title="Ký tên"><i class="ico k-green"><span class="ti ti-signature"></span></i><span>Chữ ký</span></button>
+  <span class="sep"></span>
+  <button id="btnUndo" title="Hoàn tác (Ctrl+Z)"><i class="ico k-gray"><span class="ti ti-arrow-back-up"></span></i><span>Hoàn tác</span></button>
+  <button id="btnRedo" title="Làm lại (Ctrl+Y)"><i class="ico k-gray"><span class="ti ti-arrow-forward-up"></span></i><span>Làm lại</span></button>
+  <span class="spacer"></span>
+  <div class="zoom">
+    <button id="zOut" title="Thu nhỏ">−</button>
+    <span id="zVal">100%</span>
+    <button id="zIn" title="Phóng to">＋</button>
+    <button id="zFit" title="Vừa chiều rộng">↔</button>
+  </div>
+  <div class="pager">Trang <input id="pgNum" type="number" min="1" value="1"> / <span id="pgTotal">0</span></div>
+</nav>
+
+<main>
+  <aside id="side">
+    <div class="side-head">
+      <b>Trang</b>
+      <span class="spacer"></span>
+      <button id="selAll" class="mini" title="Chọn tất cả trang">Chọn hết</button>
+    </div>
+    <div class="page-ops">
+      <button id="opBlank" title="Chèn trang trắng sau trang hiện tại"><i class="ico k-blue"><span class="ti ti-file-plus"></span></i>Trang trắng</button>
+      <button id="opDup" title="Nhân bản trang đang chọn"><i class="ico k-blue"><span class="ti ti-copy"></span></i>Nhân bản</button>
+      <button id="opRotL" title="Xoay trái trang đang chọn"><i class="ico k-teal"><span class="ti ti-rotate"></span></i>Xoay</button>
+      <button id="opRotR" title="Xoay phải trang đang chọn"><i class="ico k-teal"><span class="ti ti-rotate-clockwise"></span></i>Xoay</button>
+      <button id="opDel" title="Xoá trang đang chọn"><i class="ico k-red"><span class="ti ti-trash"></span></i>Xoá</button>
+      <button id="opMerge" title="Ghép thêm file PDF / ảnh vào cuối"><i class="ico k-purple"><span class="ti ti-arrow-merge"></span></i>Ghép PDF</button>
+      <button id="opExtract" title="Trích các trang ra file PDF mới"><i class="ico k-purple"><span class="ti ti-file-export"></span></i>Trích trang</button>
+      <button id="opPng" title="Xuất trang hiện tại thành ảnh PNG"><i class="ico k-green"><span class="ti ti-photo-down"></span></i>Xuất PNG</button>
+      <button id="opCopyPg" title="Copy các trang đang chọn để dán sang file khác"><i class="ico k-amber"><span class="ti ti-clipboard-copy"></span></i>Copy trang</button>
+      <button id="opPastePg" title="Dán các trang đã copy vào sau trang hiện tại"><i class="ico k-amber"><span class="ti ti-clipboard"></span></i>Dán trang</button>
+      <button id="opOcr" title="Nhận dạng chữ trên tất cả trang scan (ảnh) của file 1 lần để sửa được chữ — tiếng Việt" style="grid-column: span 2"><i class="ico k-coral"><span class="ti ti-scan"></span></i>Nhận dạng chữ (OCR)</button>
+      <button id="opWm"title="Xoá hình mờ, hiện / ẩn các lớp nội dung (logo ẩn)" style="grid-column: span 2"><i class="ico k-blue"><span class="ti ti-droplet"></span></i>Hình mờ & lớp ẩn</button>
+    </div>
+  </aside>
+  <!-- ảnh thu nhỏ các trang: cột riêng sát vùng xem trang -->
+  <aside id="thumbcol"><div id="thumbs"></div></aside>
+
+  <section id="viewer">
+    <div id="empty">
+      <div class="drop">
+        <div class="big">📄</div>
+        <h2>Chỉnh sửa PDF ngay trên trình duyệt</h2>
+        <p>Kéo thả file PDF (hoặc ảnh JPG/PNG) vào đây</p>
+        <button id="emptyOpen" class="primary">Chọn file</button>
+        <button id="emptyNew" class="ghost">Tạo trang trắng</button>
+        <div id="recentBox" class="recent-box" hidden></div>
+        <p style="margin:12px 0 0"><a href="huong-dan.html" target="_blank">❓ Xem hướng dẫn sử dụng</a></p>
+        <ul>
+          <li>Sửa chữ có sẵn, thêm chữ tiếng Việt, tô sáng, vẽ, chèn ảnh, ký tên</li>
+          <li>Xoay, xoá, sắp xếp (kéo thả), nhân bản, chèn trang trắng</li>
+          <li>Ghép nhiều PDF, trích trang, xuất ảnh PNG, tạo PDF từ ảnh</li>
+          <li>File được xử lý ngay trên máy — không tải lên Internet</li>
+        </ul>
+      </div>
+    </div>
+    <div id="pages"></div>
+  </section>
+
+  <aside id="props">
+    <h3>Thuộc tính</h3>
+    <div class="row"><label>Màu</label><input type="color" id="pColor"><div class="swatches" id="swatches"></div></div>
+    <div class="row" id="rowFill"><label>Màu nền</label><input type="color" id="pFill" value="#ffffff"><label class="chk"><input type="checkbox" id="pNoFill" checked> Không nền</label></div>
+    <div class="row" id="rowStroke"><label>Độ dày nét</label><input type="range" id="pStroke" min="0.5" max="20" step="0.5"><span id="pStrokeV" class="val"></span></div>
+    <div class="grp" id="grpText">
+      <div class="row"><label>Phông chữ</label>
+        <select id="pFont">
+          <option>Arial</option><option>Times New Roman</option><option>Courier New</option>
+        </select>
+      </div>
+      <div class="row"><label>Cỡ chữ</label><input type="number" id="pSize" min="4" max="200" step="1"></div>
+      <div class="row toggles">
+        <button id="pBold" class="tog" title="Đậm"><b>B</b></button>
+        <button id="pItalic" class="tog" title="Nghiêng"><i>I</i></button>
+        <span class="spacer"></span>
+        <button data-align="left" class="tog al" title="Căn trái">⯇</button>
+        <button data-align="center" class="tog al" title="Căn giữa">≡</button>
+        <button data-align="right" class="tog al" title="Căn phải">⯈</button>
+      </div>
+    </div>
+    <div class="row"><label>Độ đậm (mờ)</label><input type="range" id="pOpacity" min="0.1" max="1" step="0.05"><span id="pOpacityV" class="val"></span></div>
+    <div class="objbtns" id="imgBtns">
+      <button id="oImgReplace" title="Thay bằng ảnh khác, giữ vị trí và khung">🖼 Thay ảnh</button>
+      <button id="oImgSave" title="Tải ảnh này về máy">⬇ Lưu ảnh</button>
+      <button id="oImgErase" title="Kéo khung trên ảnh để tẩy vùng đó (vd hình mờ nằm trong ảnh nền)" style="grid-column: span 2">🧽 Tẩy vùng trên ảnh</button>
+    </div>
+    <div class="objbtns" id="objBtns">
+      <div class="layer-info" id="oLayerInfo"></div>
+      <button id="oTop" title="Lên trên cùng — nằm trên mọi đối tượng và nội dung PDF (Ctrl+Shift+])">⤒ Lên trên cùng</button>
+      <button id="oUp" title="Lên 1 lớp — vượt qua đối tượng đang đè lên nó (Ctrl+])">↑ Lên 1 lớp</button>
+      <button id="oDown" title="Xuống 1 lớp — chui xuống dưới đối tượng bên dưới; hết đối tượng thì xuống dưới nội dung PDF (Ctrl+[)">↓ Xuống 1 lớp</button>
+      <button id="oBottom" title="Xuống dưới cùng — nằm dưới cả chữ, bảng, ảnh nền của PDF (Ctrl+Shift+[)">⤓ Dưới cùng</button>
+      <button id="oDup" title="Nhân bản (Ctrl+D)">⧉ Nhân bản</button>
+      <button id="oDel" class="danger" title="Xoá (Delete)">🗑 Xoá</button>
+    </div>
+    <div class="hint" id="hint"></div>
+  </aside>
+</main>
+
+<div id="sigModal" class="modal" hidden>
+  <div class="card">
+    <h3>Chữ ký</h3>
+    <div class="sig-saved" id="sigSaved"></div>
+    <p class="muted">Vẽ chữ ký bằng chuột vào khung dưới:</p>
+    <canvas id="sigPad" width="640" height="220"></canvas>
+    <div class="row">
+      <label>Màu</label>
+      <input type="color" id="sigColor" value="#0d3c9e">
+      <label>Nét</label>
+      <input type="range" id="sigWidth" min="1" max="8" step="0.5" value="2.5">
+      <span class="spacer"></span>
+      <button id="sigClear" class="ghost">Xoá vẽ lại</button>
+      <button id="sigCancel" class="ghost">Huỷ</button>
+      <button id="sigOk" class="primary">Chèn chữ ký</button>
+    </div>
+  </div>
+</div>
+
+<div id="wmModal" class="modal" hidden>
+  <div class="card wm-card">
+    <h3>Hình mờ & lớp nội dung</h3>
+    <div id="wmBody"></div>
+    <div class="row" style="margin-top:14px">
+      <span class="spacer"></span>
+      <button id="wmClose" class="ghost">Đóng</button>
+      <button id="wmApply" class="primary">Áp dụng cho cả file</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileOpen" accept="application/pdf,.pdf,image/*" multiple hidden>
+<input type="file" id="fileMerge" accept="application/pdf,.pdf,image/*" multiple hidden>
+<input type="file" id="fileImage" accept="image/*" hidden>
+<input type="file" id="fileReplace" accept="image/*" hidden>
+<div id="toast"></div>
+<div id="busy" hidden><div class="spin"></div><span id="busyMsg">Đang xử lý…</span></div>
+
+<script src="textops.js"></script>
+<script src="app.js"></script>
+<script src="tools.js"></script>
+<script src="recent.js"></script>
+<script src="compare.js"></script>
+<script src="extra.js"></script>
+<script src="layout.js"></script>
+<script>
+// Nút "Lượt truy cập": chỉ hiện khi mở trên máy chủ (qua link Internet /truy-cap.json trả 404 → giữ ẩn)
+(function () {
+  const a = document.getElementById('visitLink'), b = document.getElementById('visitBadge');
+  async function check() {
+    try {
+      const r = await fetch('truy-cap.json', { cache: 'no-store' });
+      if (!r.ok) return;
+      const list = await r.json();
+      a.hidden = false;
+      let seen = ''; try { seen = localStorage.getItem('visitSeen') || ''; } catch (e) {}
+      const n = list.filter(v => v.t > seen).length;
+      b.textContent = n > 99 ? '99+' : n; b.hidden = !n;
+      a.title = n ? n + ' lượt mới qua link Internet — bấm để xem' : 'Ai đã vào qua link Internet (chỉ hiện trên máy chủ)';
+    } catch (e) {}
+  }
+  a.addEventListener('click', () => { b.hidden = true; });
+  check(); setInterval(check, 60000);
+})();
+</script>
+</body>
+</html>
