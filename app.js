@@ -2306,7 +2306,8 @@ async function buildTextObjs(parts) {
 function pageB(R, x0, y0, W, H) { return { 0: [1, 0, 0, -1, x0, y0 + H], 90: [0, 1, 1, 0, x0, y0], 180: [-1, 0, 0, 1, x0 + W, y0], 270: [0, -1, -1, 0, x0 + W, y0 + H] }[R]; }
 function invM(m) { const [a, b, c, d, e, f] = m, det = a * d - b * c; return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det]; }
 async function copyRegion(v, box, quiet, withText = true) { // quiet: chỉ trả về danh sách đối tượng (người gọi tự cất vào clipboard)
-  const pg = v.page, sc = 3;
+  // độ nét phần hình của vùng chép: 8 điểm ảnh / point (rõ khi phóng to tới ~800%), vùng lớn thì giảm cho ảnh ≤ ~12 triệu điểm ảnh
+  const pg = v.page, sc = Math.max(2, Math.min(8, Math.sqrt(12e6 / Math.max(1, box.w * box.h))));
   const inside = new Set(v.fc.getObjects().filter(o => { const b = o.getBoundingRect(true, true); return b.left >= box.x - 1 && b.top >= box.y - 1 && b.left + b.width <= box.x + box.w + 1 && b.top + b.height <= box.y + box.h + 1; }));
   const objs = v.fc.toObject(PROPS).objects.filter((o, i) => inside.has(v.fc.item(i)));
   if (pg.src) {
