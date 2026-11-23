@@ -2357,7 +2357,12 @@ async function regionTextObjs(v, box) {
   const inBox = ([x, y]) => x >= box.x - 1 && x <= box.x + box.w + 1 && y >= box.y - 1 && y <= box.y + box.h + 1;
   // ứng viên: dòng chữ chạm khung; rồi xét theo phần MỰC của chữ (từ mép ký tự đầu → cuối, đỉnh chữ hoa → chân chữ),
   // vì người dùng hay quét khung sát chữ — ô chữ của PDF cao / rộng hơn phần mực nên xét theo ô thì bị loại oan
-  const cands = T.items.filter(a => a.it.str.trim() && [[0, -a.fh], [a.w, -a.fh], [0, a.fh * 0.2], [a.w, a.fh * 0.2]].some(([lx, ly]) => inBox(toDisp(a, lx, ly))));
+  const cands = T.items.filter(a => {
+    if (!a.it.str.trim()) return false;
+    const cs = [[0, -a.fh], [a.w, -a.fh], [0, a.fh * 0.2], [a.w, a.fh * 0.2]].map(([lx, ly]) => toDisp(a, lx, ly));
+    const bx0 = Math.min(...cs.map(c => c[0])), bx1 = Math.max(...cs.map(c => c[0])), by0 = Math.min(...cs.map(c => c[1])), by1 = Math.max(...cs.map(c => c[1]));
+    return bx0 < box.x + box.w && bx1 > box.x && by0 < box.y + box.h && by1 > box.y; // khung bao dòng chữ chạm khung quét
+  });
   if (!cands.length) return { texts, tdel };
   const lib = await getLib(pg.src);
   for (const a of cands) {
@@ -2365,12 +2370,41 @@ async function regionTextObjs(v, box) {
     const region = { x0: Math.min(...corners.map(c => c[0])), y0: Math.min(...corners.map(c => c[1])), x1: Math.max(...corners.map(c => c[0])), y1: Math.max(...corners.map(c => c[1])) };
     let hits = []; try { hits = TextOps.analyze(lib, lib.getPage(pg.index), [region]); } catch (e) {}
     const gl = hits.filter(h => !h.space); if (!gl.length) continue; // chữ trong XObject lồng → để nguyên trong phần hình
-    // mép ký tự đầu / cuối theo hướng dòng chữ (toạ độ của dòng)
-    const xs = gl.flatMap(h => [[h.x0, h.y0], [h.x1, h.y0]].map(([px, py]) => toLocal(a, ...vp.convertToViewportPoint(px, py))[0]));
-    const inset = a.fh * 0.06, lx0 = Math.min(...xs) + inset, lx1 = Math.max(...xs) - inset;
-    if (![[lx0, -a.fh * 0.7], [lx1, -a.fh * 0.7], [lx0, 0], [lx1, 0]].every(([lx, ly]) => inBox(toDisp(a, lx, ly)))) continue;
-    const t = await textObjFor(v, T, a, gl);
-    texts.push(t.toObject(PROPS)); tdel.push(region);
+    // chọn theo TỪNG KÝ TỰ như bôi đen chữ: ký tự có tâm (giữa thân chữ) nằm trong khung là được chọn
+    // → khung cắt ngang chân / đỉnh dòng chữ vẫn lấy trọn chữ thành ô chữ (không bị cắt thành hình dở dang)
+    const gx = gl.map(h => { const a0 = toLocal(a, ...vp.convertToViewportPoint(h.x0, h.y0))[0], a1 = toLocal(a, ...vp.convertToViewportPoint(h.x1, h.y1))[0]; return { h, l: Math.min(a0, a1), r: Math.max(a0, a1) }; });
+    const inside = gx.map(g => { const xc = (g.l + g.r) / 2; return [-a.fh * 0.35, -a.fh * 0.2, -a.fh * 0.55].some(ly => inBox(toDisp(a, xc, ly))); });
+    const nIn = inside.filter(Boolean).length; if (!nIn) continue;
+    const chars = [...a.it.str];
+    // ghép ký tự ↔ hình chữ: dấu cách có thể là 1 hình chữ (phông CID) hoặc không
+    const nonSp = gl.length === chars.length ? chars.map((c, i) => i) : chars.map((c, i) => (c.trim() ? i : -1)).filter(i => i >= 0);
+    let sub = null;
+    if (nIn < gl.length) {
+      // chỉ 1 phần dòng nằm trong khung: lấy đoạn ký tự từ ký tự được chọn đầu → cuối
+      if (nonSp.length !== gl.length) { if (nIn < gl.length / 2) continue; } // không ghép được ký tự ↔ hình chữ: chọn cả dòng khi quá nửa nằm trong
+      else {
+        let ks = inside.map((b, k) => (b ? k : -1)).filter(k => k >= 0);
+        while (ks.length && !chars[nonSp[ks[0]]].trim()) ks.shift(); // bỏ dấu cách ở 2 đầu đoạn chọn
+        while (ks.length && !chars[nonSp[ks[ks.length - 1]]].trim()) ks.pop();
+        if (!ks.length) continue;
+        const k0 = ks[0], k1 = ks[ks.length - 1];
+        const c0 = nonSp[k0], c1 = nonSp[k1], lxS = gx[k0].l, lxE = gx[k1].r;
+        sub = { text: chars.slice(c0, c1 + 1).join(''), lxS, lxE, gl: gl.slice(k0, k1 + 1),
+          // vùng xoá chỉ phủ các ký tự được chọn (ranh giới ở giữa khe với ký tự kề bên)
+          rL: k0 > 0 ? (gx[k0 - 1].r + lxS) / 2 : lxS - 0.5, rR: k1 < gl.length - 1 ? (lxE + gx[k1 + 1].l) / 2 : lxE + 0.5 };
+      }
+    }
+    if (!sub) {
+      const t = await textObjFor(v, T, a, gl);
+      texts.push(t.toObject(PROPS)); tdel.push(region);
+      continue;
+    }
+    const [sx0, sy0] = toDisp(a, sub.lxS, 0);
+    const a2 = { ...a, it: { ...a.it, str: sub.text }, ox: sx0, oy: sy0, w: sub.lxE - sub.lxS };
+    const t = await textObjFor(v, T, a2, sub.gl);
+    texts.push(t.toObject(PROPS));
+    const cs2 = [[sub.rL, -a.fh], [sub.rR, -a.fh], [sub.rL, a.fh * 0.35], [sub.rR, a.fh * 0.35]].map(([lx, ly]) => vp.convertToPdfPoint(...toDisp(a, lx, ly)));
+    tdel.push({ x0: Math.min(...cs2.map(c => c[0])), y0: Math.min(...cs2.map(c => c[1])), x1: Math.max(...cs2.map(c => c[0])), y1: Math.max(...cs2.map(c => c[1])) });
   }
   return { texts, tdel };
 }
@@ -2640,9 +2674,24 @@ async function fontByShape(v, T, fontName) {
     const wgt = [...a.it.str.replace(/\s/g, '')].length; // dòng dài đáng tin hơn
     votes[st.family] = (votes[st.family] || 0) + wgt; bolds.push([st.bold, wgt]); itals.push([st.italic, wgt]);
   }
-  const fam = Object.keys(votes).sort((a, b) => votes[b] - votes[a])[0];
+  let fam = Object.keys(votes).sort((a, b) => votes[b] - votes[a])[0];
   const maj = arr => { let y = 0, n = 0; for (const [b, w] of arr) { n += w; if (b) y += w; } return y > n / 2; };
-  const res = fam ? { family: fam, bold: maj(bolds), italic: maj(itals) } : null;
+  let bold = maj(bolds);
+  // kiểm thêm bằng BỀ RỘNG chữ (PDF lưu đúng bề rộng từng ký tự): so với phông đoán theo hình dạng + các phông CÓ TÊN dùng trên cùng trang
+  // (vd "CIDFont+F1" cạnh "Verdana Regular" → thường cũng là Verdana). Chữ nhỏ thì hình dạng Arial / Verdana dễ nhầm, bề rộng thì không.
+  try {
+    const named = {};
+    for (const a of T.items) { if (!a.it.str.trim() || a.it.fontName === fontName) continue; let n = ''; try { n = T.p.commonObjs.get(a.it.fontName).name || ''; } catch (e) {} if (!n || isGenericFontName(n)) continue; const f = matchFamily(n); if (f) named[f] = (named[f] || 0) + 1; }
+    const cands = [...new Set([...Object.keys(votes), ...Object.keys(named)])];
+    const mc = document.createElement('canvas').getContext('2d'), wsum = samples.reduce((s, a) => s + [...a.it.str.replace(/\s/g, '')].length, 0);
+    const err = (f, b) => { let e = 0; for (const a of samples) { mc.font = `${b ? 'bold ' : ''}${a.fh}px "${f}"`; const w = mc.measureText(a.it.str).width; if (!(w > 0)) return 9; e += Math.abs(Math.log(a.w / w)) * [...a.it.str.replace(/\s/g, '')].length; } return e / Math.max(1, wsum); };
+    for (const f of cands) await ensureFaceLoaded(f);
+    let best = null;
+    for (const f of cands) for (const b of [false, true]) { const e = err(f, b) - (named[f] ? 0.004 : 0); if (!best || e < best.e) best = { f, b, e }; }
+    const cur = fam ? err(fam, bold) : 9;
+    if (best && best.e < 0.04 && (cur > best.e + 0.008 || !fam)) { fam = best.f; bold = best.b; }
+  } catch (e) { console.warn('fontByShape width', e); }
+  const res = fam ? { family: fam, bold, italic: maj(itals) } : null;
   shapeFontCache.set(key, res);
   return res;
 }
