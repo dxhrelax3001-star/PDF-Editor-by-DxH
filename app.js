@@ -2355,14 +2355,20 @@ async function strippedJsPage(pg, del) {
 async function regionTextObjs(v, box) {
   const pg = v.page, T = await pageTextItems(v), vp = T.vp, texts = [], tdel = [];
   const inBox = ([x, y]) => x >= box.x - 1 && x <= box.x + box.w + 1 && y >= box.y - 1 && y <= box.y + box.h + 1;
-  const items = T.items.filter(a => a.it.str.trim() && [[0, -a.fh], [a.w, -a.fh], [0, a.fh * 0.2], [a.w, a.fh * 0.2]].every(([lx, ly]) => inBox(toDisp(a, lx, ly))));
-  if (!items.length) return { texts, tdel };
+  // ứng viên: dòng chữ chạm khung; rồi xét theo phần MỰC của chữ (từ mép ký tự đầu → cuối, đỉnh chữ hoa → chân chữ),
+  // vì người dùng hay quét khung sát chữ — ô chữ của PDF cao / rộng hơn phần mực nên xét theo ô thì bị loại oan
+  const cands = T.items.filter(a => a.it.str.trim() && [[0, -a.fh], [a.w, -a.fh], [0, a.fh * 0.2], [a.w, a.fh * 0.2]].some(([lx, ly]) => inBox(toDisp(a, lx, ly))));
+  if (!cands.length) return { texts, tdel };
   const lib = await getLib(pg.src);
-  for (const a of items) {
+  for (const a of cands) {
     const corners = [[-0.5, -a.fh], [a.w + 0.5, -a.fh], [-0.5, a.fh * 0.35], [a.w + 0.5, a.fh * 0.35]].map(([lx, ly]) => vp.convertToPdfPoint(...toDisp(a, lx, ly)));
     const region = { x0: Math.min(...corners.map(c => c[0])), y0: Math.min(...corners.map(c => c[1])), x1: Math.max(...corners.map(c => c[0])), y1: Math.max(...corners.map(c => c[1])) };
     let hits = []; try { hits = TextOps.analyze(lib, lib.getPage(pg.index), [region]); } catch (e) {}
     const gl = hits.filter(h => !h.space); if (!gl.length) continue; // chữ trong XObject lồng → để nguyên trong phần hình
+    // mép ký tự đầu / cuối theo hướng dòng chữ (toạ độ của dòng)
+    const xs = gl.flatMap(h => [[h.x0, h.y0], [h.x1, h.y0]].map(([px, py]) => toLocal(a, ...vp.convertToViewportPoint(px, py))[0]));
+    const inset = a.fh * 0.06, lx0 = Math.min(...xs) + inset, lx1 = Math.max(...xs) - inset;
+    if (![[lx0, -a.fh * 0.7], [lx1, -a.fh * 0.7], [lx0, 0], [lx1, 0]].every(([lx, ly]) => inBox(toDisp(a, lx, ly)))) continue;
     const t = await textObjFor(v, T, a, gl);
     texts.push(t.toObject(PROPS)); tdel.push(region);
   }
