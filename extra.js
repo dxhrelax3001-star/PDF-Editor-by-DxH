@@ -249,7 +249,7 @@ const PdfExtra = (() => {
       const W0 = crop.W, mid = a => { a = a.slice().sort((x, y) => x - y); return a[a.length >> 1]; };
       const baseline0 = (block[0] === longest && W0.length ? mid(W0.map(q => q.y0 + ms(q.t).asc * fs)) : block[0].y0 + ms(block[0].text).asc * fs);
       const width = x1 - x0 + 1;
-      const tb = new fabric.Textbox(text, { left: x0, top: baseline0 - fs * 0.908, width, originX: 'left', originY: 'top', fontFamily: font, fontSize: fs,
+      const tb = new fabric.Textbox(text, { left: x0, top: baseline0 - fs * BASE_K, width, originX: 'left', originY: 'top', fontFamily: font, fontSize: fs,
         fontWeight: bold ? 'bold' : 'normal', fontStyle: italic ? 'italic' : 'normal', charSpacing: cs, lineHeight: Math.max(0.8, step / (fs * 1.13)),
         textAlign: justify ? 'justify-left' : 'left', // justify-left: dòng cuối đoạn để thường (như bản gốc) fill: crop.hex(crop.ink), kind: 'text', splitByGrapheme: false,
         ocrBlur: Math.round(Math.min(0.15, (st.blur || 0) / crop.k * 0.4) * 100) / 100, objectCaching: false });

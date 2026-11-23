@@ -24,6 +24,8 @@ const S = {
 };
 
 fabric.Object.NUM_FRACTION_DIGITS = 5; // giữ đủ số lẻ khi lưu đối tượng (mặc định làm tròn 2 số → scaleX 1,05298 thành 1,05: chữ lệch 0,5pt)
+// chân chữ (đường baseline) nằm dưới mép trên ô chữ fabric 1 đoạn = cỡ chữ × BASE_K (fabric: 1,13 × (1 − 0,222) ≈ 0,879)
+const BASE_K = fabric.Text.prototype._fontSizeMult * (1 - fabric.Text.prototype._fontSizeFraction);
 fabric.IText.prototype.objectCaching = false; // vẽ chữ trực tiếp, không qua ảnh đệm → nét chữ sắc, không nhoè khi phóng to
 fabric.IText.prototype.selectionColor = 'rgba(26,115,232,0.18)';
 fabric.IText.prototype.editingBorderColor = 'rgba(26,115,232,0.5)';
@@ -1781,7 +1783,7 @@ async function editOcrLine(v, l, pt) {
   // đặt sao cho đỉnh chữ thật trùng đỉnh khung OCR: top của IText = đường chân chữ - phần trên chân chữ của ô fabric
   // chân chữ: theo từng từ (đỉnh từ + phần trên chân chữ của từ đó) lấy trung vị — đỡ lệch vì dấu tiếng Việt cao thấp khác nhau
   const baseline = W.length ? mid(W.map(q => q.y0 + meas(q.t).asc * fs)) : l.y0 + m.actualBoundingBoxAscent / 100 * fs;
-  const t = new fabric.IText(text, { left: l.x0 - (m.actualBoundingBoxLeft ? -m.actualBoundingBoxLeft / 100 * fs : 0), top: baseline - fs * 0.908, originX: 'left', originY: 'top', fontFamily: font, fontSize: fs,
+  const t = new fabric.IText(text, { left: l.x0 - (m.actualBoundingBoxLeft ? -m.actualBoundingBoxLeft / 100 * fs : 0), top: baseline - fs * BASE_K, originX: 'left', originY: 'top', fontFamily: font, fontSize: fs,
     fill: hex(ink), fontWeight: bold ? 'bold' : 'normal', fontStyle: italic ? 'italic' : 'normal', charSpacing: cs, kind: 'text', underline: !!underline,
     // nhoè như bản scan (point) — phép đo hay ra lớn hơn thật (bù cả nét mảnh) nên giảm bớt, tối đa 0,25pt kẻo chữ nhạt đi
     ocrBlur: Math.round(Math.min(0.15, (st.blur || 0) / k * 0.4) * 100) / 100, objectCaching: false,
@@ -1878,8 +1880,8 @@ async function ocrRestyle(v, t) {
     if ([...now.replace(/\s/g, '')].length >= 12) tally[F.st.base || F.font] = (tally[F.st.base || F.font] || 0) + 1;
     v.page.ocrFonts = tally;
     const old = { f: t.fontFamily, b: t.fontWeight, i: t.fontStyle, s: t.fontSize };
-    const baseline = t.top + t.fontSize * 0.908; // giữ nguyên đường chân chữ
-    t.set({ fontFamily: F.font, fontWeight: F.bold ? 'bold' : 'normal', fontStyle: F.italic ? 'italic' : 'normal', fontSize: F.fs, charSpacing: F.cs, top: baseline - F.fs * 0.908 });
+    const baseline = t.top + t.fontSize * BASE_K; // giữ nguyên đường chân chữ
+    t.set({ fontFamily: F.font, fontWeight: F.bold ? 'bold' : 'normal', fontStyle: F.italic ? 'italic' : 'normal', fontSize: F.fs, charSpacing: F.cs, top: baseline - F.fs * BASE_K });
     t.ocrSrc = { ...src, text: t.text };
     ensureFontOption(F.font); t.initDimensions && t.initDimensions(); t.setCoords();
     const vv = S.views.get(v.page.id) || v; vv.fc && vv.fc.requestRenderAll(); syncView(vv); refreshProps();
@@ -1983,16 +1985,24 @@ async function editTextAt(v, pt) {
   // phông, đậm, nghiêng, cỡ, màu giữ như chữ gốc
   let pdfFont = g0 ? g0.font : '';
   if (!pdfFont) { try { const f = p.commonObjs.get(hit.it.fontName); pdfFont = (f && f.name) || ''; } catch (e) {} }
-  let family = matchFamily(pdfFont);
-  if (!family && pdfFont) { busy(true, 'Đang tìm phông miễn phí trên Google Fonts…'); try { family = await webFontFor(pdfFont); } finally { busy(false); } if (family) toast(`Đã tải phông miễn phí "${family}" từ Google Fonts`, 3000); }
+  // tên phông nhúng chung chung (vd "CIDFont+F1", "F1", "T1_0") → không đoán theo tên, nhận theo hình dạng chữ trên trang
+  const genericName = !pdfFont || isGenericFontName(pdfFont);
+  let family = genericName ? null : matchFamily(pdfFont), shapeFont = null;
+  if (genericName) {
+    busy(true, 'Đang nhận dạng phông chữ…');
+    try { shapeFont = await fontByShape(v, T, hit.it.fontName); } catch (e) { console.warn('fontByShape', e); } finally { busy(false); }
+    if (shapeFont) family = shapeFont.family;
+  }
+  if (!family && pdfFont && !genericName) { busy(true, 'Đang tìm phông miễn phí trên Google Fonts…'); try { family = await webFontFor(pdfFont); } finally { busy(false); } if (family) toast(`Đã tải phông miễn phí "${family}" từ Google Fonts`, 3000); }
   else if (family) await ensureFaceLoaded(family);
   if (!family) {
     const fam = (v.tc.styles[hit.it.fontName] || {}).fontFamily || '';
     family = fam === 'monospace' ? 'Courier New' : fam === 'serif' ? 'Times New Roman' : 'Arial';
-    if (pdfFont) toast(`Máy chưa cài phông "${pdfFont.replace(/^[A-Z]{6}\+/, '')}" — tạm dùng ${family}`, 3500);
+    if (pdfFont && !genericName) toast(`Máy chưa cài phông "${pdfFont.replace(/^[A-Z]{6}\+/, '')}" — tạm dùng ${family}`, 3500);
   }
   ensureFontOption(family);
-  const bold = g0 ? g0.bold : /bold|black|heavy/i.test(pdfFont), italic = g0 ? g0.italic : /italic|oblique/i.test(pdfFont);
+  let bold = g0 ? g0.bold : /bold|black|heavy/i.test(pdfFont), italic = g0 ? g0.italic : /italic|oblique/i.test(pdfFont);
+  if (shapeFont) { bold = shapeFont.bold; italic = shapeFont.italic; }
   const sizes = glyphs.map(h => h.size).sort((a, b) => a - b);
   const fs = Math.round((sizes.length ? sizes[sizes.length >> 1] : fh) * 100) / 100;
   const hexC = c => '#' + c.map(x => Math.round(Math.max(0, Math.min(1, x)) * 255).toString(16).padStart(2, '0')).join('');
@@ -2006,7 +2016,7 @@ async function editTextAt(v, pt) {
   const horiz = Math.abs(hit.ang) < 0.03;
   const align = guessAlign(local, { x0, x1, yb: 0, fh, str },horiz ? dispSize(pg)[0] / 2 - hit.ox : null);
   const anchorLx = align === 'center' ? (x0 + x1) / 2 : align === 'right' ? x1 : x0;
-  const [ax, ay] = toDisp(hit, anchorLx, -fs * 0.908);
+  const [ax, ay] = toDisp(hit, anchorLx, -fs * BASE_K);
 
   const fc = v.fc;
   // vị trí mực của chữ gốc (trước khi xoá) — để đặt chữ mới trùng khít, không lệch
@@ -2280,7 +2290,7 @@ async function buildTextObjs(parts) {
       if (pf && !matchFamily(pf)) await webFontFor(pf); // phông chưa có → thử tải bản miễn phí
       const st = styleFromGlyphs(gl, a.fh, fname);
       await ensureFaceLoaded(st.family);
-      const [x, y] = toDisp(a, a.w * s / len, -st.fs * 0.908);
+      const [x, y] = toDisp(a, a.w * s / len, -st.fs * BASE_K);
       const t = new fabric.IText(txt, { left: x, top: y, angle: Math.round(a.ang * 180 / Math.PI * 100) / 100, originX: 'left', originY: 'top', fontFamily: st.family, fontSize: st.fs, fill: st.color,
         fontWeight: st.bold ? 'bold' : 'normal', fontStyle: st.italic ? 'italic' : 'normal', kind: 'text' });
       out.push(t.toObject(PROPS));
@@ -2509,6 +2519,46 @@ function matchFamily(pdfName) {
   for (const [k, f] of FONTS.byNorm) if (cands[1].startsWith(k) && k.length >= 4 && (!best || k.length > normFam(best).length)) best = f;
   return best;
 }
+/* Tên phông nhúng không mang tên phông thật (vd "CIDFont+F1", "ABCDEF+F2", "T1_0", "TT3") — phần mềm xuất PDF đặt tên tạm */
+function isGenericFontName(pdfName) {
+  const raw = (pdfName || '').replace(/^[A-Z]{6}\+/, '').replace(/^CIDFont\+/i, '').trim();
+  if (!raw || raw.length < 3) return true;
+  if (/^(cidfont|font|f|t|tt|c|r|ft|fnt)[_+-]?\d+([_+-]\d+)*$/i.test(raw)) return true;
+  if (/^[A-Z]{1,3}\d+(_\d+)?$/.test(raw)) return true;
+  return false;
+}
+/* Nhận phông theo hình dạng chữ: lấy vài dòng chữ cùng phông nhúng trên trang (bản vẽ rõ nét từ PDF),
+   vẽ thử bằng các phông có trên máy rồi so hình (giống cách nhận phông trang scan) — bỏ phiếu theo từng dòng */
+const shapeFontCache = new Map();
+async function fontByShape(v, T, fontName) {
+  const pg = v.page, key = pg.id + '|' + fontName;
+  if (shapeFontCache.has(key)) return shapeFontCache.get(key);
+  const samples = T.items.filter(a => a.it.fontName === fontName && Math.abs(a.ang) < 0.002 && [...a.it.str.replace(/\s/g, '')].length >= 2 && a.w > 2)
+    .sort((a, b) => b.it.str.replace(/\s/g, '').length - a.it.str.replace(/\s/g, '').length).slice(0, 5);
+  if (!samples.length) return null;
+  const p = await getJsPage(pg), k = 6, votes = {}, bolds = [], itals = [];
+  for (const a of samples) {
+    const box = { x: a.ox - 1, y: a.oy - a.fh * 1.15, w: a.w + 2, h: a.fh * 1.6 };
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(box.w * k)); c.height = Math.max(1, Math.ceil(box.h * k));
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    await p.render({ canvasContext: ctx, viewport: p.getViewport({ scale: k, rotation: effRot(pg), offsetX: -box.x * k, offsetY: -box.y * k }), background: 'white' }).promise;
+    // khung sát mực của dòng chữ
+    const W = c.width, H = c.height, d = ctx.getImageData(0, 0, W, H).data, thr = 384;
+    let x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i] + d[i + 1] + d[i + 2] < thr) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
+    if (x1 - x0 < 4 || y1 - y0 < 4) continue;
+    const cw = x1 - x0 + 1, ch = y1 - y0 + 1, crop = ctx.getImageData(x0, y0, cw, ch).data;
+    const st = ocrStyle(a.it.str.trim(), crop, cw, ch, thr, null);
+    if (!st || !st.family) continue;
+    const wgt = [...a.it.str.replace(/\s/g, '')].length; // dòng dài đáng tin hơn
+    votes[st.family] = (votes[st.family] || 0) + wgt; bolds.push([st.bold, wgt]); itals.push([st.italic, wgt]);
+  }
+  const fam = Object.keys(votes).sort((a, b) => votes[b] - votes[a])[0];
+  const maj = arr => { let y = 0, n = 0; for (const [b, w] of arr) { n += w; if (b) y += w; } return y > n / 2; };
+  const res = fam ? { family: fam, bold: maj(bolds), italic: maj(itals) } : null;
+  shapeFontCache.set(key, res);
+  return res;
+}
 const fontBytes = {};
 function pickFontFile(fam, bold, italic) {
   const all = FONTS.list.filter(f => f.family === fam);
@@ -2613,7 +2663,7 @@ async function drawObj(out, page, o, ctx) {
       const lines = o._textLines || o.textLines.map(l => [...l]);
       for (let i = 0; i < lines.length; i++) {
         const lh = o.getHeightOfLine(i);
-        const yDown = -o.height / 2 + acc + lh / o.lineHeight - fs * o._fontSizeFraction;
+        const yDown = -o.height / 2 + acc + lh / o.lineHeight * (1 - o._fontSizeFraction); // đúng như fabric vẽ (_renderChars)
         acc += lh;
         const gs = lines[i].map(ch => (ch === '\t' ? ' ' : ch)); if (!gs.join('').trim()) continue;
         if (o.underline && !invisible) { // gạch chân như fabric vẽ: dưới chân chữ 0,1 cỡ chữ, dày cỡ chữ / 15
