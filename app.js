@@ -1236,7 +1236,7 @@ async function moveSelBox(v, b0, dx, dy) {
   busy(true, 'Đang dời vùng…');
   try {
     // nội dung gốc của vùng (ảnh + thông tin để lưu bằng nét vector) — đối tượng trong khung lấy đúng bộ mà bước xoá gỡ ra
-    const region = (await copyRegion(v, b0, true)).filter(o => o.kind === 'region');
+    const region = (await copyRegion(v, b0, true, false)).filter(o => o.kind === 'region');
     if (S.selBox) S.selBox.box = { ...b0 };
     deleteSelBox.removed = [];
     await deleteSelBox();
@@ -2305,22 +2305,85 @@ async function buildTextObjs(parts) {
 /* Copy vùng: nội dung PDF trong khung (dạng vector khi xuất) + các đối tượng đã thêm nằm trong khung */
 function pageB(R, x0, y0, W, H) { return { 0: [1, 0, 0, -1, x0, y0 + H], 90: [0, 1, 1, 0, x0, y0], 180: [-1, 0, 0, 1, x0 + W, y0], 270: [0, -1, -1, 0, x0 + W, y0 + H] }[R]; }
 function invM(m) { const [a, b, c, d, e, f] = m, det = a * d - b * c; return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det]; }
-async function copyRegion(v, box, quiet) { // quiet: chỉ trả về danh sách đối tượng (người gọi tự cất vào clipboard)
+async function copyRegion(v, box, quiet, withText = true) { // quiet: chỉ trả về danh sách đối tượng (người gọi tự cất vào clipboard)
   const pg = v.page, sc = 3;
   const inside = new Set(v.fc.getObjects().filter(o => { const b = o.getBoundingRect(true, true); return b.left >= box.x - 1 && b.top >= box.y - 1 && b.left + b.width <= box.x + box.w + 1 && b.top + b.height <= box.y + box.h + 1; }));
   const objs = v.fc.toObject(PROPS).objects.filter((o, i) => inside.has(v.fc.item(i)));
   if (pg.src) {
+    // chữ gốc nằm gọn trong vùng → chép thành ô chữ sửa được (giữ phông / cỡ / màu / vị trí); phần hình vẽ còn lại chép như cũ
+    let texts = [], tdel = [];
+    if (withText) { try { ({ texts, tdel } = await regionTextObjs(v, box)); } catch (e) { console.warn('regionText', e); texts = []; tdel = []; } }
+    const del = (pg.del || []).concat(tdel);
     const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(box.w * sc)); c.height = Math.max(1, Math.ceil(box.h * sc));
-    const p = await getJsPage(pg);
+    const p = tdel.length ? await strippedJsPage(pg, del) : await getJsPage(pg);
     await p.render({ canvasContext: c.getContext('2d'), viewport: p.getViewport({ scale: sc, rotation: effRot(pg), offsetX: -box.x * sc, offsetY: -box.y * sc }), background: 'rgba(0,0,0,0)' }).promise;
-    objs.unshift({ type: 'image', version: '5.3.0', originX: 'left', originY: 'top', left: box.x, top: box.y, width: c.width, height: c.height, scaleX: 1 / sc, scaleY: 1 / sc,
-      src: c.toDataURL('image/png'), kind: 'region', region: { src: pg.src, index: pg.index, del: pg.del || [], imgEdits: pg.imgEdits || [], rm: pg.rm || null, R: effRot(pg), box, sc } });
+    if (await canvasHasInk(c)) objs.unshift({ type: 'image', version: '5.3.0', originX: 'left', originY: 'top', left: box.x, top: box.y, width: c.width, height: c.height, scaleX: 1 / sc, scaleY: 1 / sc,
+      src: c.toDataURL('image/png'), kind: 'region', region: { src: pg.src, index: pg.index, del, imgEdits: pg.imgEdits || [], rm: pg.rm || null, R: effRot(pg), box, sc } });
+    objs.push(...texts);
   }
   if (quiet) return objs;
   if (!objs.length) return toast('Vùng trống — không có gì để copy');
   setClip({ kind: 'objs', objs, text: '[PDF Editor: vùng đã copy]', pageId: pg.id });
   try { await navigator.clipboard.writeText(S.clip.text); } catch (e) { S.clip.noSync = true; }
   toast('Đã copy vùng — chuyển sang file/trang khác rồi bấm Ctrl+V', 3500);
+}
+const canvasHasInk = c => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; for (let i = 3; i < d.length; i += 4) if (d[i] > 20) return true; return false; };
+// trang gốc đã bỏ thêm các vùng chữ (del) — để vẽ phần hình của vùng chép mà không dính chữ đã tách thành ô chữ
+async function strippedJsPage(pg, del) {
+  const tmp = await L.PDFDocument.create();
+  const [cp] = await tmp.copyPages(await getLib(pg.src), [pg.index]); tmp.addPage(cp);
+  TextOps.strip(tmp, cp, await prepRegions(tmp, del, pg.imgEdits || []), pg.rm || null);
+  const doc = await pdfjsLib.getDocument({ data: await tmp.save() }).promise;
+  return doc.getPage(1);
+}
+/* các dòng chữ gốc nằm gọn trong khung → ô chữ (dạng JSON của fabric) + vùng xoá chữ đó khỏi phần hình */
+async function regionTextObjs(v, box) {
+  const pg = v.page, T = await pageTextItems(v), vp = T.vp, texts = [], tdel = [];
+  const inBox = ([x, y]) => x >= box.x - 1 && x <= box.x + box.w + 1 && y >= box.y - 1 && y <= box.y + box.h + 1;
+  const items = T.items.filter(a => a.it.str.trim() && [[0, -a.fh], [a.w, -a.fh], [0, a.fh * 0.2], [a.w, a.fh * 0.2]].every(([lx, ly]) => inBox(toDisp(a, lx, ly))));
+  if (!items.length) return { texts, tdel };
+  const lib = await getLib(pg.src);
+  for (const a of items) {
+    const corners = [[-0.5, -a.fh], [a.w + 0.5, -a.fh], [-0.5, a.fh * 0.35], [a.w + 0.5, a.fh * 0.35]].map(([lx, ly]) => vp.convertToPdfPoint(...toDisp(a, lx, ly)));
+    const region = { x0: Math.min(...corners.map(c => c[0])), y0: Math.min(...corners.map(c => c[1])), x1: Math.max(...corners.map(c => c[0])), y1: Math.max(...corners.map(c => c[1])) };
+    let hits = []; try { hits = TextOps.analyze(lib, lib.getPage(pg.index), [region]); } catch (e) {}
+    const gl = hits.filter(h => !h.space); if (!gl.length) continue; // chữ trong XObject lồng → để nguyên trong phần hình
+    const t = await textObjFor(v, T, a, gl);
+    texts.push(t.toObject(PROPS)); tdel.push(region);
+  }
+  return { texts, tdel };
+}
+/* 1 mảnh chữ gốc → ô chữ cùng phông / cỡ / màu, mực trùng khít chữ gốc (như khi sửa chữ) */
+async function textObjFor(v, T, a, glyphs) {
+  const g0 = glyphs[0];
+  let pdfFont = g0.font || ''; if (!pdfFont) { try { const f = T.p.commonObjs.get(a.it.fontName); pdfFont = (f && f.name) || ''; } catch (e) {} }
+  const generic = !pdfFont || isGenericFontName(pdfFont);
+  let family = generic ? null : matchFamily(pdfFont), bold = g0.bold, italic = g0.italic;
+  if (generic) { const sf = await fontByShape(v, T, a.it.fontName).catch(() => null); if (sf) ({ family, bold, italic } = sf); }
+  else if (!family) family = await webFontFor(pdfFont);
+  if (!family) { const fam = (v.tc && v.tc.styles[a.it.fontName] || {}).fontFamily || ''; family = fam === 'monospace' ? 'Courier New' : fam === 'serif' ? 'Times New Roman' : 'Arial'; }
+  await ensureFaceLoaded(family); ensureFontOption(family);
+  const sizes = glyphs.map(h => h.size).sort((x, y) => x - y), fs = Math.round(sizes[sizes.length >> 1] * 100) / 100;
+  const hexC = c => '#' + c.map(x => Math.round(Math.max(0, Math.min(1, x)) * 255).toString(16).padStart(2, '0')).join('');
+  const str = a.it.str, [x, y] = toDisp(a, 0, -fs * BASE_K);
+  const t = new fabric.IText(str, { left: x, top: y, angle: Math.round(a.ang * 180 / Math.PI * 100) / 100, originX: 'left', originY: 'top', fontFamily: family, fontSize: fs, fill: hexC(g0.color),
+    fontWeight: bold ? 'bold' : 'normal', fontStyle: italic ? 'italic' : 'normal', kind: 'text' });
+  const sx = a.sx && Math.abs(a.sx - 1) > 0.01 && a.sx > 0.3 && a.sx < 3 ? Math.round(a.sx * 10000) / 10000 : 1;
+  if (sx !== 1) t.set({ scaleX: sx });
+  const nch = [...str].length;
+  if (nch > 2 && t.width > 0) { const gap = a.w - t.width * sx; if (Math.abs(gap) > a.w * 0.01) { const csv = Math.round(gap / (nch - 1) / (fs * sx) * 1000); if (Math.abs(csv) <= 250) t.set({ charSpacing: csv }); } }
+  t.initDimensions && t.initDimensions();
+  if (Math.abs(a.ang) < 0.002) { // đặt khít theo mực chữ gốc
+    try {
+      const io = await inkOfPage(v.page, { x: a.ox - 1, y: a.oy - a.fh * 1.15, w: a.w + 2, h: a.fh * 1.6 });
+      let inN = io && inkOfText(t);
+      if (inN) { const f = (io.right - io.left) / Math.max(0.1, inN.right - inN.left); if (Math.abs(f - 1) > 0.0005 && Math.abs(f - 1) < 0.03) { t.set({ scaleX: (t.scaleX || 1) * f }); t.setCoords(); inN = inkOfText(t); } }
+      if (inN) { const dx = io.left - inN.left, dy = io.base - inN.base; if (Math.abs(dx) < fs * 0.6) t.set({ left: t.left + dx }); if (Math.abs(dy) < fs * 0.4) t.set({ top: t.top + dy }); }
+    } catch (e) { console.warn('ink', e); }
+  }
+  const g2 = glyphs.find(h => h.mode === 2 && h.lw > 0);
+  if (g2) t.set({ stroke: hexC(g2.strokeColor || g2.color), strokeWidth: Math.round(g2.lw * 1000) / 1000, paintFirst: 'fill', strokeLineJoin: 'round' });
+  return t;
 }
 async function drawRegion(out, page, o, ctx) {
   const r = o.region, key = r.src + '|' + r.index + '|' + JSON.stringify(r.del || []) + '|' + JSON.stringify(r.rm || {}) + '|' + JSON.stringify(r.imgEdits || []);
