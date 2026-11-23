@@ -2103,8 +2103,16 @@ async function editTextAt(v, pt) {
 const INK_K = 8;
 function inkMeasure(c, ox, oy, k) {
   const W = c.width, H = c.height, d = c.getContext('2d').getImageData(0, 0, W, H).data;
+  const ink = (x, y) => { const i = (y * W + x) * 4; return d[i + 3] > 60 && d[i] + d[i + 1] + d[i + 2] < 600; };
+  // đường kẻ bảng / khung sát chữ (hàng mực chạy gần hết bề ngang, cột mực suốt chiều cao) không phải nét chữ → bỏ qua,
+  // kẻo chân chữ bị tính nhầm vào đường kẻ bên dưới (chữ sửa xong bị kéo xuống đè lên đường kẻ)
+  const rowN = new Int32Array(H), colN = new Int32Array(W);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (ink(x, y)) { rowN[y]++; colN[x]++; }
+  const rule = new Uint8Array(H), vrule = new Uint8Array(W);
+  for (let y = 0; y < H; y++) if (rowN[y] > W * 0.8) rule[y] = 1;
+  for (let x = 0; x < W; x++) if (colN[x] > H * 0.92) vrule[x] = 1;
   let left = -1, right = -1; const bot = new Int32Array(W).fill(-1);
-  for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) { const i = (y * W + x) * 4; if (d[i + 3] > 60 && d[i] + d[i + 1] + d[i + 2] < 600) { if (left < 0) left = x; right = x; bot[x] = y; } }
+  for (let x = 0; x < W; x++) { if (vrule[x]) continue; for (let y = 0; y < H; y++) { if (rule[y] || !ink(x, y)) continue; if (left < 0) left = x; right = x; bot[x] = y; } }
   if (left < 0) return null;
   const cnt = new Map(); for (const b of bot) if (b >= 0) cnt.set(b, (cnt.get(b) || 0) + 1);
   let base = -1, best = 0; for (const [y, n] of cnt) if (n > best || (n === best && y > base)) { best = n; base = y; }
