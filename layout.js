@@ -2,14 +2,14 @@
    18. Kéo mép để đổi độ rộng cột Trang / ảnh thu nhỏ / Thuộc tính; nút ẩn / hiện từng cột; nhớ cách xếp cho lần sau (trên máy này)
    19. Xem 1 trang (cuộn dọc) hoặc 2 trang cạnh nhau */
 const PdfLayout = (() => {
-  const KEY = 'pdfLayoutV1';
+  const KEY = 'pdfedit.layout'; // khoá theo quy ước pdfedit.* (các ứng dụng dùng chung tên miền dxh3001)
   const COLS = {
     side: { sel: '#side', min: 150, max: 380, def: 200, grip: 'after', label: 'cột nút Trang', icon: 'layout-sidebar' },
     thumb: { sel: '#thumbcol', min: 110, max: 320, def: 156, grip: 'after', label: 'cột ảnh thu nhỏ', icon: 'layout-list' },
     props: { sel: '#props', min: 190, max: 420, def: 230, grip: 'before', label: 'cột Thuộc tính', icon: 'layout-sidebar-right' },
   };
   let P = {};
-  try { P = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { P = {}; }
+  try { P = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem('pdfLayoutV1') || '{}') || {}; localStorage.removeItem('pdfLayoutV1'); } catch (e) { P = {}; }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (e) {} };
   let rt;
   const changed = () => { window.dispatchEvent(new Event('resize')); clearTimeout(rt); rt = setTimeout(() => { if (typeof placeSelBox === 'function') placeSelBox(); }, 50); };
@@ -47,7 +47,7 @@ const PdfLayout = (() => {
   function setTwoUp(on) {
     S.twoUp = !!on; P.two = S.twoUp; save(); apply();
     if (!S.pages.length) return;
-    const cur = S.cur; S.zoom = fitZoom(); rebuild(); updateUI();
+    const cur = S.cur; S.zoom = fitZoom(); S.fit = true; rebuild(); updateUI();
     setTimeout(() => scrollToPage(cur), 50);
   }
   // nút trên thanh công cụ (cạnh phóng to / thu nhỏ)
@@ -65,10 +65,26 @@ const PdfLayout = (() => {
       toggle(k);
     }));
   }
+  // vùng xem trang đổi rộng (ẩn / kéo cột, đổi cỡ cửa sổ): đang ở mức "vừa khung" thì tự vừa lại
+  // cột ảnh thu nhỏ đổi rộng: vẽ lại ảnh thu nhỏ theo cỡ mới
+  function watch() {
+    if (!window.ResizeObserver) return;
+    let lastV = 0, tv, lastT = 0, tt;
+    new ResizeObserver(es => {
+      const w = Math.round(es[0].contentRect.width); if (!w || Math.abs(w - lastV) < 8) return; lastV = w;
+      // (bỏ qua thay đổi do chính lần vừa khung trước gây ra, vd thanh cuộn hiện / ẩn — tránh lặp đi lặp lại)
+      clearTimeout(tv); tv = setTimeout(() => { if (S.fit && S.pages.length && typeof fitNow === 'function' && Date.now() - (S.fitAt || 0) > 700) { S.fitAt = Date.now(); fitNow(); } }, 180);
+    }).observe($('#viewer'));
+    const tc = $('#thumbcol');
+    if (tc) new ResizeObserver(es => {
+      const w = Math.round(es[0].contentRect.width); if (!w || Math.abs(w - lastT) < 6) return; const first = !lastT; lastT = w;
+      if (first) return; clearTimeout(tt); tt = setTimeout(() => { if (S.pages.length) buildThumbs(); }, 200);
+    }).observe(tc);
+  }
   function init() {
     S.twoUp = !!P.two;
-    addGrips(); addButtons(); apply();
-    if (S.twoUp && S.pages.length) { S.zoom = fitZoom(); rebuild(); }
+    addGrips(); addButtons(); apply(); watch();
+    if (S.twoUp && S.pages.length) { S.zoom = fitZoom(); S.fit = true; rebuild(); }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
   return { setTwoUp, toggle, apply };

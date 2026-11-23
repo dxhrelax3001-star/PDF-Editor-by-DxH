@@ -9,6 +9,8 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 const PROPS = ['kind', 'region', 'under', 'ocrBlur', 'tag', 'selectable', 'evented', 'ocrSrc', 'lockMovementX', 'lockMovementY', 'hasControls'];
 const THUMB_W = 118;
+// ảnh thu nhỏ to / nhỏ theo độ rộng cột ảnh thu nhỏ (kéo giãn cột → ảnh to theo)
+const thumbW = () => { const c = document.getElementById('thumbcol'); const w = c && c.clientWidth ? c.clientWidth - 40 : THUMB_W; return Math.max(70, Math.min(320, w)); };
 let uid = 0;
 const nid = p => p + (++uid).toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -212,7 +214,7 @@ async function filesToPages(files) {
   return pages;
 }
 /* ---------------- nhiều tài liệu trong cùng cửa sổ (thanh tab) ---------------- */
-const DOC_KEYS = ['pages', 'undo', 'redo', 'snap', 'dirty', 'fileName', 'handle', 'zoom', 'cur', 'sel', 'outline'];
+const DOC_KEYS = ['pages', 'undo', 'redo', 'snap', 'dirty', 'fileName', 'handle', 'zoom', 'fit', 'cur', 'sel', 'outline'];
 S.docs = []; S.docIdx = -1;
 function emptyDoc() { return { id: nid('d'), pages: [], undo: [], redo: [], snap: '[]', dirty: false, fileName: 'tai-lieu.pdf', handle: null, zoom: 1, cur: 0, sel: new Set(), scrollTop: 0, outline: null }; }
 function saveDoc() {
@@ -265,7 +267,7 @@ async function openFiles(files, replace) {
       if (S.pages.length) addDocTab(); // mở trong tab mới, giữ tài liệu đang mở
       S.pages = pages; S.handle = null; S.sel = new Set(); S.cur = 0;
       S.fileName = files.length === 1 ? files[0].name.replace(/\.[^.]+$/, '') + '.pdf' : 'tai-lieu-ghep.pdf';
-      S.zoom = fitZoom(); rebuild(); resetHistory(); updateUI();
+      S.zoom = fitZoom(); S.fit = true; rebuild(); resetHistory(); updateUI();
       $('#viewer').scrollTop = 0;
       S.outline = null; if (window.PdfTools) PdfTools.importOutline(); // giữ mục lục (bookmark) có sẵn trong file
     } else {
@@ -281,7 +283,7 @@ function openPicker() { if (window.PdfRecent) PdfRecent.open(); else $('#fileOpe
 function newDoc() {
   if (S.pages.length) addDocTab();
   S.pages = [blankPage()]; S.handle = null; S.fileName = 'tai-lieu-moi.pdf'; S.sel = new Set(); S.cur = 0;
-  S.zoom = fitZoom(); rebuild(); resetHistory(); updateUI();
+  S.zoom = fitZoom(); S.fit = true; rebuild(); resetHistory(); updateUI();
 }
 
 /* ---------------- hiển thị trang ---------------- */
@@ -414,10 +416,22 @@ function onScroll() {
   S.pages.forEach((pg, i) => { const v = S.views.get(pg.id); if (v && v.el.offsetTop <= mid && v.el.offsetTop > bestTop) { best = i; bestTop = v.el.offsetTop; } });
   setCurrent(best);
 }
-function setZoom(z, keep = true) {
+// anchor {x, y} (toạ độ màn hình): giữ đúng điểm đó của trang nằm yên dưới con trỏ sau khi phóng to / thu nhỏ;
+// không có anchor thì giữ giữa vùng xem. fit = true: mức "vừa khung" (tự vừa lại khi đổi cỡ cột / cửa sổ)
+function setZoom(z, anchor, fit) {
   if (!S.pages.length) return;
-  S.zoom = Math.max(0.25, Math.min(4, z)); rebuild(); updateUI();
+  const viewer = $('#viewer'), vr = viewer.getBoundingClientRect();
+  const ax = anchor ? anchor.x : vr.left + vr.width / 2, ay = anchor ? anchor.y : vr.top + Math.min(vr.height / 2, 200);
+  let keep = null;
+  for (const v of S.views.values()) { const r = v.el.getBoundingClientRect(); if (ay >= r.top && ay <= r.bottom + 18) { keep = { id: v.page.id, fx: (ax - r.left) / r.width, fy: (ay - r.top) / r.height }; break; } }
+  S.zoom = Math.max(0.25, Math.min(4, z)); S.fit = !!fit; rebuild(); updateUI();
+  if (keep && S.views.get(keep.id)) {
+    const r = S.views.get(keep.id).el.getBoundingClientRect();
+    viewer.scrollTop += r.top + keep.fy * r.height - ay;
+    viewer.scrollLeft += r.left + keep.fx * r.width - ax;
+  }
 }
+const fitNow = () => setZoom(fitZoom(), null, true);
 
 /* ---------------- thumbnail ---------------- */
 function buildThumbs() {
@@ -426,8 +440,8 @@ function buildThumbs() {
   tio = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) renderThumb(e.target.dataset.id); }), { root: box, rootMargin: '300px 0px' });
   S.thumbs.clear();
   S.pages.forEach((pg, i) => {
-    const [W, H] = dispSize(pg), s = THUMB_W / Math.max(W, H * 0.8);
-    const d = document.createElement('div'); d.className = 'thumb'; d.dataset.id = pg.id; d.draggable = true;
+    const tw = thumbW(), [W, H] = dispSize(pg), s = tw / Math.max(W, H * 0.8);
+    const d = document.createElement('div'); d.className = 'thumb'; d.dataset.id = pg.id; d.draggable = true; d.style.width = tw + 14 + 'px';
     d.classList.toggle('cur', i === S.cur); d.classList.toggle('sel', S.sel.has(pg.id));
     const cv = document.createElement('canvas'); cv.style.width = W * s + 'px'; cv.style.height = H * s + 'px';
     cv.width = Math.round(W * s * DPR); cv.height = Math.round(H * s * DPR);
@@ -2826,7 +2840,7 @@ function bind() {
   $('#btnUndo').onclick = undo; $('#btnRedo').onclick = redo;
   $('#zIn').onclick = () => setZoom(S.zoom * 1.2);
   $('#zOut').onclick = () => setZoom(S.zoom / 1.2);
-  $('#zFit').onclick = () => setZoom(fitZoom());
+  $('#zFit').onclick = () => fitNow();
   $('#pgNum').onchange = e => scrollToPage(Math.max(1, Math.min(S.pages.length, +e.target.value)) - 1);
   $('#opBlank').onclick = insertBlank;
   $('#opDup').onclick = () => duplicatePages(targetPages());
@@ -2899,7 +2913,8 @@ function bind() {
   let zt; $('#viewer').addEventListener('wheel', e => {
     if (!e.ctrlKey) return; e.preventDefault();
     S.pendingZoom = (S.pendingZoom || S.zoom) * (e.deltaY < 0 ? 1.1 : 1 / 1.1);
-    clearTimeout(zt); zt = setTimeout(() => { setZoom(S.pendingZoom); S.pendingZoom = 0; }, 120);
+    const at = { x: e.clientX, y: e.clientY }; // giữ điểm dưới con trỏ chuột đứng yên
+    clearTimeout(zt); zt = setTimeout(() => { setZoom(S.pendingZoom, at); S.pendingZoom = 0; }, 120);
   }, { passive: false });
 
   // thumbnails: chọn, nút, kéo thả sắp xếp
