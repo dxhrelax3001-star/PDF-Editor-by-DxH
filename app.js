@@ -1993,7 +1993,10 @@ async function editTextAt(v, pt) {
   let family = genericName ? null : matchFamily(pdfFont), shapeFont = null;
   if (genericName) {
     busy(true, 'Đang nhận dạng phông chữ…');
-    try { shapeFont = await fontByShape(v, T, hit.it.fontName); } catch (e) { console.warn('fontByShape', e); } finally { busy(false); }
+    try {
+      shapeFont = await fontByShape(v, T, hit.it.fontName);
+      const ck = shapeFont && await itemFontCheck(v, hit, shapeFont); if (ck) shapeFont = ck; // phông gộp: dòng này có thể là phông khác
+    } catch (e) { console.warn('fontByShape', e); } finally { busy(false); }
     if (shapeFont) family = shapeFont.family;
   }
   if (!family && pdfFont && !genericName) { busy(true, 'Đang tìm phông miễn phí trên Google Fonts…'); try { family = await webFontFor(pdfFont); } finally { busy(false); } if (family) toast(`Đã tải phông miễn phí "${family}" từ Google Fonts`, 3000); }
@@ -2111,8 +2114,17 @@ function inkMeasure(c, ox, oy, k) {
   const rule = new Uint8Array(H), vrule = new Uint8Array(W);
   for (let y = 0; y < H; y++) if (rowN[y] > W * 0.8) rule[y] = 1;
   for (let x = 0; x < W; x++) if (colN[x] > H * 0.92) vrule[x] = 1;
+  // mảng mực chạm mép vùng đo (vòng tròn chú thích quanh số, đường kẻ, khung… luôn chạy ra ngoài vùng đo) → không phải nét chữ
+  const lab = new Int32Array(W * H), drop = new Uint8Array(W * H); let nid2 = 0;
+  for (let s = 0; s < W * H; s++) {
+    const sx = s % W, sy = (s / W) | 0; if (lab[s] || rule[sy] || vrule[sx] || !ink(sx, sy)) continue;
+    nid2++; const st = [s], px = []; lab[s] = nid2; let edge = false;
+    while (st.length) { const q = st.pop(), qx = q % W, qy = (q / W) | 0; px.push(q); if (qx === 0 || qy === 0 || qx === W - 1 || qy === H - 1) edge = true;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = qx + dx, ny = qy + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue; const n = ny * W + nx; if (!lab[n] && !rule[ny] && !vrule[nx] && ink(nx, ny)) { lab[n] = nid2; st.push(n); } } }
+    if (edge) for (const q of px) drop[q] = 1;
+  }
   let left = -1, right = -1; const bot = new Int32Array(W).fill(-1);
-  for (let x = 0; x < W; x++) { if (vrule[x]) continue; for (let y = 0; y < H; y++) { if (rule[y] || !ink(x, y)) continue; if (left < 0) left = x; right = x; bot[x] = y; } }
+  for (let x = 0; x < W; x++) { if (vrule[x]) continue; for (let y = 0; y < H; y++) { if (rule[y] || drop[y * W + x] || !ink(x, y)) continue; if (left < 0) left = x; right = x; bot[x] = y; } }
   if (left < 0) return null;
   const cnt = new Map(); for (const b of bot) if (b >= 0) cnt.set(b, (cnt.get(b) || 0) + 1);
   let base = -1, best = 0; for (const [y, n] of cnt) if (n > best || (n === best && y > base)) { best = n; base = y; }
@@ -2422,7 +2434,7 @@ async function textObjFor(v, T, a, glyphs) {
   let pdfFont = g0.font || ''; if (!pdfFont) { try { const f = T.p.commonObjs.get(a.it.fontName); pdfFont = (f && f.name) || ''; } catch (e) {} }
   const generic = !pdfFont || isGenericFontName(pdfFont);
   let family = generic ? null : matchFamily(pdfFont), bold = g0.bold, italic = g0.italic;
-  if (generic) { const sf = await fontByShape(v, T, a.it.fontName).catch(() => null); if (sf) ({ family, bold, italic } = sf); }
+  if (generic) { let sf = await fontByShape(v, T, a.it.fontName).catch(() => null); const ck = sf && await itemFontCheck(v, a, sf); if (ck) sf = ck; if (sf) ({ family, bold, italic } = sf); }
   else if (!family) family = await webFontFor(pdfFont);
   if (!family) { const fam = (v.tc && v.tc.styles[a.it.fontName] || {}).fontFamily || ''; family = fam === 'monospace' ? 'Courier New' : fam === 'serif' ? 'Times New Roman' : 'Arial'; }
   await ensureFaceLoaded(family); ensureFontOption(family);
@@ -2659,11 +2671,50 @@ function isGenericFontName(pdfName) {
 /* Nhận phông theo hình dạng chữ: lấy vài dòng chữ cùng phông nhúng trên trang (bản vẽ rõ nét từ PDF),
    vẽ thử bằng các phông có trên máy rồi so hình (giống cách nhận phông trang scan) — bỏ phiếu theo từng dòng */
 const shapeFontCache = new Map();
+/* Kiểm phông riêng cho 1 dòng chữ: phông nhúng "CIDFont+F1" có thể GỘP ký tự của nhiều phông (vd chữ "A x 8" là Verdana
+   nhưng số chú thích "1", "2" là Arial). Vẽ riêng dòng đó, chỉ giữ các mảng mực nằm gọn trong ô chữ (bỏ vòng tròn chú thích,
+   đường kẻ bao quanh), rồi so hình dạng — giữ phông chung của cụm trừ khi dòng này giống hẳn phông khác. */
+async function itemFontCheck(v, a, base) {
+  try {
+    if (!base || !base.family || Math.abs(a.ang) > 0.002) return null;
+    const text = a.it.str.trim(); if (!text) return null;
+    const fh = a.fh, k = Math.max(3, Math.min(8, 160 / fh)), box = { x: a.ox - fh * 0.8, y: a.oy - fh * 1.5, w: a.w + fh * 1.6, h: fh * 2.2 };
+    const p = await getJsPage(v.page), c = document.createElement('canvas'); c.width = Math.ceil(box.w * k); c.height = Math.ceil(box.h * k);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    await p.render({ canvasContext: ctx, viewport: p.getViewport({ scale: k, rotation: effRot(v.page), offsetX: -box.x * k, offsetY: -box.y * k }), background: 'white' }).promise;
+    const W = c.width, H = c.height, d = ctx.getImageData(0, 0, W, H).data, on = new Uint8Array(W * H);
+    for (let j = 0, i = 0; j < on.length; j++, i += 4) on[j] = d[i] + d[i + 1] + d[i + 2] < 384 ? 1 : 0;
+    // mảng mực liền nhau; giữ mảng nằm gọn trong ô chữ (theo bề rộng chữ, từ trên đỉnh chữ hoa tới dưới chân chữ)
+    const X0 = (a.ox - box.x - fh * 0.15) * k, X1 = (a.ox + a.w - box.x + fh * 0.15) * k, Y0 = (a.oy - fh * 1.05 - box.y) * k, Y1 = (a.oy + fh * 0.32 - box.y) * k;
+    const lab = new Int32Array(W * H), keep = new Uint8Array(W * H); let id = 0;
+    for (let s = 0; s < on.length; s++) {
+      if (!on[s] || lab[s]) continue; id++;
+      const st = [s], px = []; lab[s] = id; let x0 = W, y0 = H, x1 = -1, y1 = -1;
+      while (st.length) { const q = st.pop(), qx = q % W, qy = (q / W) | 0; px.push(q); if (qx < x0) x0 = qx; if (qx > x1) x1 = qx; if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = qx + dx, ny = qy + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue; const n = ny * W + nx; if (on[n] && !lab[n]) { lab[n] = id; st.push(n); } } }
+      if (x0 >= X0 && x1 <= X1 && y0 >= Y0 && y1 <= Y1) for (const q of px) keep[q] = 1;
+    }
+    let x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (let q = 0; q < keep.length; q++) if (keep[q]) { const qx = q % W, qy = (q / W) | 0; if (qx < x0) x0 = qx; if (qx > x1) x1 = qx; if (qy < y0) y0 = qy; if (qy > y1) y1 = qy; }
+    if (x1 - x0 < 3 || y1 - y0 < 3) return null;
+    const cw = x1 - x0 + 1, ch = y1 - y0 + 1, crop = new Uint8ClampedArray(cw * ch * 4);
+    for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) { const q = (y + y0) * W + x + x0, o = (y * cw + x) * 4, val = keep[q] ? Math.min(d[q * 4], d[q * 4 + 1], d[q * 4 + 2]) : 255; crop[o] = crop[o + 1] = crop[o + 2] = val; crop[o + 3] = 255; }
+    const st = ocrStyle(text, crop, cw, ch, 384, null, base.family);
+    if (!st || !st.family) return null;
+    const stBase = st.base || st.family;
+    const baseOf = f => { for (const [b0, arr] of Object.entries(OCR_WEIGHTS)) if (arr.includes(f)) return b0; return f; };
+    if (stBase === baseOf(base.family)) return null; // cùng họ phông với cả cụm → giữ như cũ
+    return { family: st.family, bold: st.bold, italic: st.italic };
+  } catch (e) { console.warn('itemFontCheck', e); return null; }
+}
 async function fontByShape(v, T, fontName) {
   const pg = v.page, key = pg.id + '|' + fontName;
   if (shapeFontCache.has(key)) return shapeFontCache.get(key);
-  const samples = T.items.filter(a => a.it.fontName === fontName && Math.abs(a.ang) < 0.002 && [...a.it.str.replace(/\s/g, '')].length >= 2 && a.w > 2)
-    .sort((a, b) => b.it.str.replace(/\s/g, '').length - a.it.str.replace(/\s/g, '').length).slice(0, 5);
+  // mẫu: các dòng cùng phông, dài trước; phông chỉ có chữ đơn lẻ (số chú thích "1", "2", "A"…) thì lấy cả chữ đơn lẻ
+  const all = T.items.filter(a => a.it.fontName === fontName && Math.abs(a.ang) < 0.002 && a.it.str.trim() && a.w > 1)
+    .sort((a, b) => b.it.str.replace(/\s/g, '').length - a.it.str.replace(/\s/g, '').length);
+  const long = all.filter(a => [...a.it.str.replace(/\s/g, '')].length >= 2);
+  const samples = (long.length ? long : all).slice(0, 5);
   if (!samples.length) return null;
   const p = await getJsPage(pg), k = 6, votes = {}, bolds = [], itals = [];
   for (const a of samples) {
@@ -2690,12 +2741,14 @@ async function fontByShape(v, T, fontName) {
   try {
     const named = {};
     for (const a of T.items) { if (!a.it.str.trim() || a.it.fontName === fontName) continue; let n = ''; try { n = T.p.commonObjs.get(a.it.fontName).name || ''; } catch (e) {} if (!n || isGenericFontName(n)) continue; const f = matchFamily(n); if (f) named[f] = (named[f] || 0) + 1; }
-    const cands = [...new Set([...Object.keys(votes), ...Object.keys(named)])];
+    // ứng viên: phông đoán theo hình dạng + phông có tên cùng trang (được ưu tiên nhẹ) + các phông thông dụng
+    const common = OCR_FONTS.concat(['Segoe UI Semibold', 'Arial Narrow', 'Century Gothic', 'Trebuchet MS', 'Georgia']).filter(f => FONTS.byNorm.has(normFam(f)) || OCR_FONTS.includes(f));
+    const cands = [...new Set([...Object.keys(votes), ...Object.keys(named), ...common])];
     const mc = document.createElement('canvas').getContext('2d'), wsum = samples.reduce((s, a) => s + [...a.it.str.replace(/\s/g, '')].length, 0);
     const err = (f, b) => { let e = 0; for (const a of samples) { mc.font = `${b ? 'bold ' : ''}${a.fh}px "${f}"`; const w = mc.measureText(a.it.str).width; if (!(w > 0)) return 9; e += Math.abs(Math.log(a.w / w)) * [...a.it.str.replace(/\s/g, '')].length; } return e / Math.max(1, wsum); };
     for (const f of cands) await ensureFaceLoaded(f);
     let best = null;
-    for (const f of cands) for (const b of [false, true]) { const e = err(f, b) - (named[f] ? 0.004 : 0); if (!best || e < best.e) best = { f, b, e }; }
+    for (const f of cands) for (const b of [false, true]) { const e = err(f, b) - (named[f] ? 0.004 : 0) - (votes[f] ? 0.004 : 0); if (!best || e < best.e) best = { f, b, e }; }
     const cur = fam ? err(fam, bold) : 9;
     if (best && best.e < 0.04 && (cur > best.e + 0.008 || !fam)) { fam = best.f; bold = best.b; }
   } catch (e) { console.warn('fontByShape width', e); }
