@@ -49,6 +49,7 @@ function commit() {
   const s = snapshot(); if (s === S.snap) return;
   S.undo.push(S.snap); if (S.undo.length > 80) S.undo.shift();
   S.snap = s; S.redo = []; S.dirty = true; updateUI();
+  if (window.PdfFind && PdfFind.isOpen()) { clearTimeout(S.findT); S.findT = setTimeout(() => PdfFind.refresh(), 500); } // nội dung đổi → tìm lại
 }
 function resetHistory() { S.undo = []; S.redo = []; S.snap = snapshot(); S.dirty = false; }
 function undo() { if (!S.undo.length) return; S.redo.push(S.snap); S.snap = S.undo.pop(); S.pages = JSON.parse(S.snap); S.dirty = true; rebuild(); }
@@ -322,6 +323,7 @@ function rebuild() {
   buildThumbs();
   viewer.scrollTop = ratio * viewer.scrollHeight;
   updateUI();
+  if (window.PdfFind) PdfFind.redraw(); // vẽ lại ô tô sáng của thanh tìm chữ
 }
 function ready(v) {
   if (!v) return Promise.resolve();
@@ -2983,6 +2985,8 @@ function bind() {
     const ctrl = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
     if (ctrl && k === 's') { e.preventDefault(); savePdf(e.shiftKey); return; }
     if (ctrl && k === 'o') { e.preventDefault(); openPicker(); return; }
+    if (ctrl && k === 'f' && window.PdfFind) { e.preventDefault(); PdfFind.open(); return; } // tìm chữ trong file
+    if (e.key === 'F3' && window.PdfFind && PdfFind.isOpen()) { e.preventDefault(); e.shiftKey ? PdfFind.prev() : PdfFind.next(); return; }
     if (editing || tag === 'input' || tag === 'textarea' || tag === 'select' || !$('#sigModal').hidden) return;
     if (ctrl && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
     if (ctrl && k === 'y') { e.preventDefault(); redo(); return; }

@@ -304,3 +304,19 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 /* ---------- 19. xem 2 trang cạnh nhau ---------- */
 #pages .prow { display: flex; justify-content: center; align-items: flex-start; gap: 16px; }
 #pages .prow .page { margin: 0 0 18px; }
+/* ---------- 26. tìm chữ (Ctrl+F) ---------- */
+.find-bar { position: fixed; z-index: 45; display: flex; align-items: center; gap: 4px; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 5px 6px 5px 10px; box-shadow: 0 6px 20px rgba(0,0,0,.18); font-size: 13px; }
+.find-bar[hidden] { display: none; }
+.find-bar > .ti { color: var(--muted); font-size: 16px; }
+.find-bar input { width: 220px; border: 0; outline: 0; font: inherit; padding: 4px 2px; }
+.find-bar .fc { color: var(--muted); font-size: 12px; min-width: 64px; text-align: right; white-space: nowrap; }
+.find-bar.none .fc { color: #d93025; }
+.find-bar.none input { color: #d93025; }
+.find-bar button { border: 0; background: transparent; border-radius: 6px; padding: 4px 7px; font-size: 12.5px; color: #3c4043; cursor: pointer; display: inline-flex; align-items: center; }
+.find-bar button .ti { font-size: 16px; }
+.find-bar button:hover { background: var(--hover); }
+.find-bar button.on { background: #e8f0fe; color: #0b57d0; font-weight: 600; }
+.find-bar .fsep { width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
+.find-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 4; pointer-events: none; }
+.find-hit { position: absolute; transform-origin: 0 0; background: rgba(255, 213, 0, 0.42); mix-blend-mode: multiply; border-radius: 2px; }
+.find-hit.cur { background: rgba(255, 140, 0, 0.6); box-shadow: 0 0 0 2px rgba(255, 120, 0, 0.9); }
