@@ -396,6 +396,9 @@ async function makeFabric(v) {
   hookCanvas(v);
   fc._mainView = true;
   fc.on('after:render', () => drawUnder(v));
+  // nét vẽ (khung viền, đường kẻ…): chỉ chọn khi bấm trúng nét — bấm vào khoảng trống bên trong khung lớn
+  // thì chọn được hình / chữ nằm trong đó, không bị khung viền ngoài cùng "chiếm" mất
+  fc.on('object:added', e => { const o = e.target; if (o && (o.kind === 'vector' || (o.type === 'group' && o.getObjects().every(x => x.kind === 'vector' || x.type === 'path')))) o.perPixelTargetFind = true; });
   const objs = await enliven(v.page.objs);
   objs.forEach(o => { if (o.styles) clearOcrMarks(o); fc.add(o); });
   v.loading = false; fc.renderAll();
