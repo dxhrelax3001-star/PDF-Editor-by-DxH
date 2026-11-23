@@ -2286,8 +2286,22 @@ async function buildTextObjs(parts) {
     });
     let hits = [];
     if (pg.src) { try { const lib = await getLib(pg.src); hits = TextOps.analyze(lib, lib.getPage(pg.index), regs); } catch (e) { console.warn(e); } }
+    const T = await pageTextItems(v);
     for (let i = 0; i < list.length; i++) {
       const { a, s, len, txt } = list[i];
+      // cùng cách với sửa chữ / chép vùng: nhận phông (cả theo hình dạng), khớp mực chữ gốc → bản dán giống hệt bản gốc
+      const gl0 = hits.filter(h => h.ri === i && !h.space);
+      if (gl0.length) {
+        try {
+          const full = await textObjFor(v, T, a, gl0), cb = (full.__charBounds && full.__charBounds[0]) || [];
+          if (s === 0 && txt === a.it.str) { out.push(full.toObject(PROPS)); continue; }
+          const ci = [...a.it.str].slice(0, s).join('').length; // vị trí ký tự đầu đoạn được chọn
+          const lx = (cb[ci] ? cb[ci].left : 0) * (full.scaleX || 1), rad = (full.angle || 0) * Math.PI / 180;
+          const o = full.toObject(PROPS);
+          Object.assign(o, { text: txt, left: full.left + lx * Math.cos(rad), top: full.top + lx * Math.sin(rad), styles: {} });
+          out.push(o); continue;
+        } catch (e) { console.warn('textObjFor', e); }
+      }
       let fname = ''; try { const f = p.commonObjs.get(a.it.fontName); fname = (f && f.name) || ''; } catch (e) {}
       const gl = hits.filter(h => h.ri === i && !h.space), pf = (gl[0] && gl[0].font) || fname;
       if (pf && !matchFamily(pf)) await webFontFor(pf); // phông chưa có → thử tải bản miễn phí
