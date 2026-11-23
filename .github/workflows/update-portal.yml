@@ -1,0 +1,17 @@
+# Mỗi lần push lên main: báo Cloudflare build lại web tổng https://dxh3001.pages.dev/
+# (web tổng tự tải bản mới nhất của ứng dụng này). Secret PORTAL_DEPLOY_HOOK = deploy hook của project dxh3001.
+name: Cap nhat web tong
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Goi deploy hook Cloudflare
+        env:
+          HOOK: ${{ secrets.PORTAL_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then echo "Chua co secret PORTAL_DEPLOY_HOOK"; exit 1; fi
+          curl -fsS -X POST "$HOOK" > /dev/null && echo "Da bao Cloudflare build lai dxh3001.pages.dev"
