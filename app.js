@@ -850,32 +850,109 @@ function pageTextItems(v) {
 const toLocal = (a, x, y) => [(x - a.ox) * a.ux + (y - a.oy) * a.uy, -(x - a.ox) * a.uy + (y - a.oy) * a.ux];
 const toDisp = (a, lx, ly) => [a.ox + a.ux * lx - a.uy * ly, a.oy + a.uy * lx + a.ux * ly];
 const sameDir = (a, b) => Math.abs(Math.atan2(Math.sin(a.ang - b.ang), Math.cos(a.ang - b.ang))) < 0.03;
-function findRun(T, pt) {
+/* Đặt từng ký tự của ô chữ mới đúng vị trí ký tự gốc trong PDF (theo hướng dòng chữ): ký tự đầu giữ nguyên (đã căn theo mực),
+   các ký tự sau được dịch riêng (dx) để mép trái mỗi ký tự trùng ký tự gốc — PDF hay giãn khoảng trắng / căn từng chữ,
+   bề rộng chữ phông trên máy cũng có thể khác phông nhúng. Ghép ký tự ↔ hình chữ: 1-1 (kể cả dấu cách) hoặc bỏ dấu cách. */
+function alignCharsToGlyphs(t, hit, vp, hitsAll, str, fs, moveFirst, parts) {
+  // chỉ giữ hình chữ nằm trên đúng đường dòng chữ (vùng phân tích là hình chữ nhật đứng — chữ xoay / nghiêng sẽ lẫn chữ dòng bên cạnh)
+  hitsAll = hitsAll.filter(h => { const [lx, ly] = toLocal(hit, ...vp.convertToViewportPoint(h.x0, h.y0)); return Math.abs(ly) < hit.fh * 0.35; });
+  const chars = [...str]; let hs = hitsAll, map = null;
+  if (!t.__charBounds || !t.__charBounds[0]) return false;
+  t.initDimensions();
+  const m = t.calcTransformMatrix(), cb = t.__charBounds[0], off = -t.width / 2 + (t._getLineLeftOffset ? t._getLineLeftOffset(0) : 0);
+  const fpos = i => { const p = fabric.util.transformPoint(new fabric.Point(off + cb[i].left, 0), m); return toLocal(hit, p.x, p.y)[0]; };
+  const gposAll = hitsAll.map(h => toLocal(hit, ...vp.convertToViewportPoint(h.x0, h.y0))[0]);
+  if (parts && parts.length) {
+    // ghép THEO TỪNG MẢNH CHỮ của PDF: mỗi mảnh biết đúng các hình chữ nằm trong nó → ghép 1-1 trong mảnh, không lệch sang mảnh khác
+    const mm = [], hh = [];
+    for (const pt of parts) {
+      const pch = [...pt.str], gl = hitsAll.map((h, j) => ({ h, lx: gposAll[j] })).filter(o => o.lx >= pt.x - 0.3 && o.lx < pt.x + pt.w - 0.05).sort((a, b) => a.lx - b.lx);
+      if (gl.length === pch.length) gl.forEach((o, k) => { mm.push(pt.start + k); hh.push(o.h); });
+      else { const ns = pch.map((c, k) => (c.trim() ? k : -1)).filter(k => k >= 0), g2 = gl.filter(o => !o.h.space); if (g2.length === ns.length) g2.forEach((o, k) => { mm.push(pt.start + ns[k]); hh.push(o.h); }); }
+    }
+    if (mm.length >= 2) { const ord = mm.map((c, k) => k).sort((a, b) => mm[a] - mm[b]); map = ord.map(k => mm[k]); hs = ord.map(k => hh[k]); }
+  }
+  if (!map) {
+    if (hs.length === chars.length) map = chars.map((c, i) => i);
+    else { const nonSp = chars.map((c, i) => (c.trim() ? i : -1)).filter(i => i >= 0), gl = hs.filter(h => !h.space); if (gl.length === nonSp.length) { map = nonSp; hs = gl; } }
+  }
+  if (map) map = map.filter(ci => ci < chars.length);
+  if (!map || map.length < 2) return false;
+  const gpos = hs.map(h => toLocal(hit, ...vp.convertToViewportPoint(h.x0, h.y0))[0]);
+  // độ lệch cần dời của từng ký tự (so với ký tự đầu, đơn vị trang), rồi đổi sang đơn vị chữ (chia giãn ngang)
+  const sxAbs = Math.abs(t.scaleX || 1), d0 = gpos[0] - fpos(map[0]);
+  const shift = map.map((ci, k) => (gpos[k] - fpos(ci) - d0) / sxAbs);
+  // chưa căn theo mực (chữ xoay góc bất kỳ): dời cả ô chữ cho ký tự đầu trùng ký tự gốc
+  if (moveFirst && Math.abs(d0) > 0.02 && Math.abs(d0) < fs) { t.set({ left: t.left + hit.ux * d0, top: t.top + hit.uy * d0 }); t.setCoords(); }
+  const maxShift = Math.max(...shift.map(Math.abs));
+  if (maxShift * sxAbs < 0.03) return false; // đã khớp sẵn
+  const st = t.styles[0] = t.styles[0] || {};
+  let prev = 0;
+  for (let k = 1; k < map.length; k++) {
+    const dx = shift[k] - prev, ci = map[k] - 1; // dồn khoảng dịch vào ký tự ngay trước ký tự k
+    if (Math.abs(dx) > fs * 0.9) { for (const key of Object.keys(st)) { if (st[key].dx) delete st[key].dx; if (!Object.keys(st[key]).length) delete st[key]; } t.initDimensions(); return false; } // ghép sai → bỏ
+    if (Math.abs(dx) > 1e-3) { st[ci] = Object.assign(st[ci] || {}, { dx: Math.round((((st[ci] && st[ci].dx) || 0) + dx) * 1000) / 1000 }); }
+    prev = shift[k];
+  }
+  t.initDimensions(); t.dirty = true; t.setCoords();
+  return true;
+}
+// các mảnh chữ thuộc 1 dòng (run) — cùng hướng, cùng chân chữ, nằm trong [x0, x1] của run
+function runItems(T, run) {
+  const h = run.hit;
+  return T.items.filter(a => a.it.str.trim() && sameDir(a, h) && Math.abs(a.fh - h.fh) < h.fh * 0.3 && (() => { const [x, y] = toLocal(h, a.ox, a.oy); return Math.abs(y) < h.fh * 0.25 && x >= run.x0 - 0.5 && x + a.w <= run.x1 + 0.5; })());
+}
+/* dòng chữ có thật sự nhìn thấy không: chữ ẩn (Tr 3) hoặc bỏ chữ đi mà hình trang không đổi (bị che) → ẩn */
+async function runHidden(v, T, run) {
+  try {
+    const pg = v.page, vp = T.vp, h = run.hit, fh = h.fh;
+    const cs = [[run.x0 - 0.5, -fh], [run.x1 + 0.5, -fh], [run.x0 - 0.5, fh * 0.35], [run.x1 + 0.5, fh * 0.35]];
+    const reg = (() => { const q = cs.map(([lx, ly]) => vp.convertToPdfPoint(...toDisp(h, lx, ly))); return { x0: Math.min(...q.map(c => c[0])), y0: Math.min(...q.map(c => c[1])), x1: Math.max(...q.map(c => c[0])), y1: Math.max(...q.map(c => c[1])) }; })();
+    const lib = await getLib(pg.src), hits = TextOps.analyze(lib, lib.getPage(pg.index), [reg], pg.rm).filter(x => !x.space);
+    if (!hits.length) return false; // không phân tích được (chữ trong XObject…) → coi như thấy, xử lý như cũ
+    if (hits.every(x => x.mode === 3 || x.mode === 7)) return true;
+    // so 2 hình: trang hiện tại và trang khi bỏ dòng này
+    const d = cs.map(([lx, ly]) => toDisp(h, lx, ly)), box = { x: Math.min(...d.map(c => c[0])) - 1, y: Math.min(...d.map(c => c[1])) - 1 };
+    box.w = Math.max(...d.map(c => c[0])) + 1 - box.x; box.h = Math.max(...d.map(c => c[1])) + 1 - box.y;
+    const k = Math.max(1.5, Math.min(4, 60 / fh));
+    const rend = async p => { const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(box.w * k)); c.height = Math.max(1, Math.ceil(box.h * k)); const x = c.getContext('2d', { willReadFrequently: true }); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); await p.render({ canvasContext: x, viewport: p.getViewport({ scale: k, rotation: effRot(pg), offsetX: -box.x * k, offsetY: -box.y * k }) }).promise; return x.getImageData(0, 0, c.width, c.height).data; };
+    const a = await rend(await getJsPage(pg)), b = await rend(await strippedJsPage(pg, (pg.del || []).concat([reg])));
+    let diff = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 90) diff++;
+    return diff < Math.max(3, a.length / 4 * 0.002);
+  } catch (e) { console.warn('runHidden', e); return false; }
+}
+function findRun(T, pt, exclude) {
   let hit = null, best = Infinity;
   for (const a of T.items) {
-    if (!a.it.str.trim()) continue;
+    if (!a.it.str.trim() || (exclude && exclude.has(a))) continue;
     const [lx, ly] = toLocal(a, pt.x, pt.y);
     const dx = lx < 0 ? -lx : lx > a.w ? lx - a.w : 0;
     const top = -a.fh * 0.95, bot = a.fh * 0.3;
     const dy = ly < top ? top - ly : ly > bot ? ly - bot : 0;
     const d = Math.hypot(dx, dy), tol = Math.max(a.fh * 0.6, 6 / S.zoom);
-    if (d <= tol && d < best) { best = d; hit = a; }
+    // cùng khoảng cách (2 chữ cùng chứa điểm bấm): cỡ chữ gần bằng nhau (chữ chồng lên nhau) → lấy chữ vẽ SAU (nằm trên, đang nhìn thấy);
+    // cỡ khác hẳn (vd mảnh chữ có khung bao khổng lồ do ma trận lạ) → lấy chữ nhỏ hơn (khung sát hơn)
+    if (d <= tol && (d < best - 0.01 || (Math.abs(d - best) <= 0.01 && hit && (Math.max(a.fh, hit.fh) / Math.min(a.fh, hit.fh) < 1.3 || a.fh < hit.fh)))) { best = Math.min(best, d); hit = a; }
   }
   if (!hit) return null;
   // các mảnh cùng hướng, cùng đường chân chữ, liền nhau -> một dòng
   // (bỏ các mảnh chỉ có khoảng trắng — pdf.js chèn chúng vào khe giữa các ô bảng, sẽ nối nhầm nhiều ô thành một dòng)
   const line = T.items.filter(a => a.it.str.trim() && sameDir(a, hit) && Math.abs(a.fh - hit.fh) < hit.fh * 0.3)
     .map(a => { const [x, y] = toLocal(hit, a.ox, a.oy); return { a, x, y, w: a.w }; })
-    .filter(o => Math.abs(o.y) < hit.fh * 0.25).sort((p, q) => p.x - q.x);
+    .filter(o => Math.abs(o.y) < hit.fh * 0.25)
+    // mảnh chữ bị mảnh vẽ sau chồng lên (chữ cũ bị che bởi chữ mới) → bỏ, kẻo dòng gộp cả chữ bị che
+    .filter((o, _, arr) => { const io = T.items.indexOf(o.a); return !arr.some(p => p !== o && T.items.indexOf(p.a) > io && Math.max(o.a.fh, p.a.fh) / Math.min(o.a.fh, p.a.fh) < 1.3 && Math.min(o.x + o.w, p.x + p.w) - Math.max(o.x, p.x) > Math.min(o.w, p.w) * 0.5); })
+    .sort((p, q) => p.x - q.x);
   const k = line.findIndex(o => o.a === hit); let lo = k, hi = k;
   while (lo > 0 && line[lo].x - (line[lo - 1].x + line[lo - 1].w) < hit.fh * 0.8) lo--;
   while (hi < line.length - 1 && line[hi + 1].x - (line[hi].x + line[hi].w) < hit.fh * 0.8) hi++;
-  let str = '';
+  let str = ''; const parts = []; // vị trí từng mảnh chữ PDF trong chuỗi của dòng — để ghép ký tự ↔ hình chữ theo từng mảnh
   for (let i = lo; i <= hi; i++) {
     if (i > lo) { const gap = line[i].x - (line[i - 1].x + line[i - 1].w); if (gap > hit.fh * 0.15 && !/\s$/.test(str) && !/^\s/.test(line[i].a.it.str)) str += ' '; }
+    parts.push({ start: [...str].length, str: line[i].a.it.str, x: line[i].x, w: line[i].w });
     str += line[i].a.it.str;
   }
-  return { hit, str: str.replace(/\s+$/, ''), x0: line[lo].x, x1: line[hi].x + line[hi].w };
+  return { hit, str: str.replace(/\s+$/, ''), x0: line[lo].x, x1: line[hi].x + line[hi].w, parts };
 }
 function showHover(v, run) {
   if (!v.hov) { v.hov = document.createElement('div'); v.hov.className = 'txt-hover'; v.el.appendChild(v.hov); }
@@ -1513,6 +1590,9 @@ function showOcrHover(v, l) {
    - phông + nghiêng: so hình dạng (ảnh trắng đen, lưới 2x2 điểm ảnh cho phép lệch nhẹ)
    - đậm: so độ phủ mực HOẶC so ảnh xám (sau khi làm mờ chữ mẫu bằng độ mờ của bản scan)
    data: điểm ảnh RGBA vùng chữ (w x h), thr: ngưỡng tổng RGB coi là mực */
+// phông Windows thêm để nhận phông nhúng không tên (CIDFont+F1…) — chỉ dùng khi đã cài trên máy
+const SHAPE_EXTRA = ['Georgia', 'Palatino Linotype', 'Book Antiqua', 'Bookman Old Style', 'Century Schoolbook', 'Garamond', 'Constantia', 'Century Gothic', 'Franklin Gothic Medium', 'Gill Sans MT', 'Lucida Sans Unicode', 'Microsoft Sans Serif', 'Trebuchet MS', 'Arial Narrow', 'Corbel', 'Candara', 'Consolas'];
+const shapeExtra = () => SHAPE_EXTRA.filter(f => FONTS.byNorm.has(normFam(f)));
 const OCR_FONTS = ['Times New Roman', 'Arial', 'Calibri', 'Cambria', 'Tahoma', 'Verdana', 'Segoe UI', 'Courier New'];
 function ocrStyle(text, data, w, h, thr, words, prefer, preferVar, base) {
   w = Math.max(1, w); h = Math.max(1, h);
@@ -1574,7 +1654,7 @@ function ocrStyle(text, data, w, h, thr, words, prefer, preferVar, base) {
 
   // các độ đậm riêng (Segoe UI Light / Semibold…) cũng so hình dạng, sau đó quy về họ phông gốc để chọn độ đậm
   const variantBase = {}; for (const [b0, arr] of Object.entries(OCR_WEIGHTS)) for (const f of arr) if (f !== b0) variantBase[f] = b0;
-  const families = S.style.ocrFont ? [S.style.ocrFont] : OCR_FONTS.concat(Object.keys(variantBase)).filter(f => { try { return document.fonts.check(`12px "${f}"`); } catch (e) { return true; } });
+  const families = S.style.ocrFont ? [S.style.ocrFont] : OCR_FONTS.concat(Object.keys(variantBase), window.__ocrExtra || []).filter(f => { try { return document.fonts.check(`12px "${f}"`); } catch (e) { return true; } });
   const bestOf = { false: null, true: null }, all = {};
   for (const fam of families) for (const it of [false, true]) {
     const n = shape(fam, false, it), bo = shape(fam, true, it), sc = Math.max(n.dice, bo.dice);
@@ -1972,7 +2052,11 @@ async function editTextAt(v, pt) {
   const pg = v.page; if (!pg.src) return toast('Trang này không có chữ gốc để sửa — dùng "Thêm chữ"');
   showHover(v, null);
   const T = await pageTextItems(v), vp = T.vp, p = T.p;
-  const run = findRun(T, pt);
+  // bỏ qua chữ KHÔNG nhìn thấy (bị ô trắng / hình khác che, chữ ẩn Tr 3 của lớp OCR…) — sửa nó sẽ làm chữ ẩn hiện ra đè lên chữ đang thấy
+  let run = findRun(T, pt);
+  const hiddenSet = new Set();
+  for (let guard = 0; run && guard < 4 && await runHidden(v, T, run); guard++) { for (const a of runItems(T, run)) hiddenSet.add(a); run = findRun(T, pt, hiddenSet); }
+  if (!run && hiddenSet.size) return editAt(v, pt, true); // chỉ có chữ ẩn ở đây → xử lý như phần hình / ảnh scan
   if (!run) return toast('Không có chữ tại vị trí này. Chữ dạng nét vẽ / ảnh scan thì dùng "Xoá trắng" + "Thêm chữ".', 3500);
   const { hit, str, x0, x1 } = run, fh = hit.fh;
   const angDeg = Math.round(hit.ang * 180 / Math.PI * 100) / 100;
@@ -1983,7 +2067,12 @@ async function editTextAt(v, pt) {
   let hits = [];
   try { const lib = await getLib(pg.src); hits = TextOps.analyze(lib, lib.getPage(pg.index), [region]); } catch (e) { console.warn('analyze', e); }
   const glyphs = hits.filter(h => !h.space);
-  const g0 = glyphs[0] || hits[0];
+  // kiểu chính của dòng = kiểu (phông + đậm + nghiêng) nhiều ký tự nhất — dòng có thể trộn "Đơn vị bán hàng" đậm + "(Seller):" nghiêng
+  const gKey = h => h.font + '|' + !!h.bold + '|' + !!h.italic, kc = {};
+  glyphs.forEach(h => { kc[gKey(h)] = (kc[gKey(h)] || 0) + 1; });
+  const mainKey = Object.keys(kc).sort((a, b) => kc[b] - kc[a])[0];
+  const g0 = glyphs.find(h => gKey(h) === mainKey) || glyphs[0] || hits[0];
+  const multiStyle = Object.keys(kc).length > 1;
 
   // phông, đậm, nghiêng, cỡ, màu giữ như chữ gốc
   let pdfFont = g0 ? g0.font : '';
@@ -2030,13 +2119,57 @@ async function editTextAt(v, pt) {
   const inkBox = horizLine ? { x: hit.ox + x0 - 1, y: hit.oy - fh * 1.15, w: (x1 - x0) + 2, h: fh * 1.6 } : null;
   let inkOrig = null;
   if (inkBox) { try { inkOrig = await inkOfPage(pg, inkBox); } catch (e) { console.warn('ink', e); } }
+  // chữ xoay (dọc 90° / 270°, ngược 180°): căn theo khung bao mực
+  const rightAngle = !horizLine && Math.min(Math.abs(Math.sin(hit.ang)), Math.abs(Math.cos(hit.ang))) < 0.002;
+  let inkRot = null;
+  if (rightAngle) { try { const q = [[x0 - 1, -fh * 1.15], [x1 + 1, -fh * 1.15], [x0 - 1, fh * 0.45], [x1 + 1, fh * 0.45]].map(([lx, ly]) => toDisp(hit, lx, ly)); const bx = { x: Math.min(...q.map(c => c[0])), y: Math.min(...q.map(c => c[1])) }; bx.w = Math.max(...q.map(c => c[0])) - bx.x; bx.h = Math.max(...q.map(c => c[1])) - bx.y; inkRot = await inkOfPage(pg, bx); } catch (e) { console.warn('ink', e); } }
   const removed = hits.length > 0;
-  if (removed) { pg.del = (pg.del || []).concat([region]); }
+  if (removed) {
+    // chữ nghiêng góc bất kỳ: khung xoá hình chữ nhật đứng sẽ trùm cả chữ dòng bên cạnh → xoá theo từng ký tự của dòng này
+    const skew = Math.min(Math.abs(Math.sin(hit.ang)), Math.abs(Math.cos(hit.ang))) > 0.02;
+    if (skew) {
+      const lineHits = hits.filter(h => { const [lx, ly] = toLocal(hit, ...vp.convertToViewportPoint(h.x0, h.y0)); return Math.abs(ly) < fh * 0.35 && lx > x0 - fh && lx < x1 + fh; });
+      const boxes = lineHits.map(h => { const up = [-(h.y1 - h.y0), h.x1 - h.x0], L = Math.hypot(...up) || 1, s = h.size * 0.6 / L, q = [[h.x0, h.y0], [h.x1, h.y1], [h.x0 + up[0] * s, h.y0 + up[1] * s], [h.x1 + up[0] * s, h.y1 + up[1] * s]];
+        return { x0: Math.min(...q.map(c => c[0])), y0: Math.min(...q.map(c => c[1])), x1: Math.max(...q.map(c => c[0])), y1: Math.max(...q.map(c => c[1])) }; });
+      pg.del = (pg.del || []).concat(boxes.length ? boxes : [region]);
+    } else pg.del = (pg.del || []).concat([region]);
+  }
   const coverRect = () => { const [cx, cy] = toDisp(hit, x0 - 1.5, -fh * 0.98); return new fabric.Rect({ left: cx, top: cy, angle: angDeg, width: (x1 - x0) + 3, height: fh * 1.28, fill: '#ffffff', strokeWidth: 0, kind: 'whiteout', originX: 'left', originY: 'top' }); };
   const t = new fabric.IText(str, { left: ax, top: ay, angle: angDeg, originX: align, originY: 'top', fontFamily: family, fontSize: fs, fill: color,
     fontWeight: bold ? 'bold' : 'normal', fontStyle: italic ? 'italic' : 'normal', textAlign: align, kind: 'text' });
   // giữ đúng bề ngang như chữ gốc: (1) chữ bị kéo giãn / ép ngang trong PDF → scaleX; (2) khoảng cách chữ (Tc) → charSpacing
-  const sx = hit.sx && Math.abs(hit.sx - 1) > 0.01 && hit.sx > 0.3 && hit.sx < 3 ? Math.round(hit.sx * 10000) / 10000 : 1;
+  let sx = hit.sx && Math.abs(hit.sx - 1) > 0.01 && hit.sx > 0.3 && hit.sx < 3 ? Math.round(hit.sx * 10000) / 10000 : 1;
+  // tỉ lệ giãn ngang đọc từ ma trận chữ có khi sai (phông nhúng có FontMatrix riêng…) → kiểm bằng bề rộng: không giãn mà khớp hơn thì bỏ
+  if (sx !== 1 && t.width > 0) { const r = (x1 - x0) / t.width; if (Math.abs(r - 1) < Math.abs(r / sx - 1)) sx = 1; }
+  const g2 = glyphs.find(h => h.mode === 2 && h.lw > 0);
+  if (multiColor || multiStyle) { // giữ màu / kiểu riêng từng đoạn: hình chữ gốc nằm ở ô ký tự nào của dòng mới thì ký tự đó mang màu, đậm, nghiêng, phông của nó
+    const cb = (t.__charBounds && t.__charBounds[0]) || [], st = {};
+    const start = align === 'left' ? x0 : align === 'center' ? (x0 + x1) / 2 - t.width * sx / 2 : x1 - t.width * sx;
+    // ghép hình chữ ↔ ký tự theo THỨ TỰ khi số lượng khớp (chính xác nhất), không thì theo vị trí
+    const chs = [...str], nonSp = chs.map((c, i) => (c.trim() ? i : -1)).filter(i => i >= 0);
+    // ghép theo từng mảnh chữ PDF (chính xác nhất), không được thì theo tổng số lượng, cuối cùng theo vị trí
+    const pmap = new Map();
+    for (const pt of (run.parts || [])) {
+      const pch = [...pt.str], gl = hits.map(h => ({ h, lx: toLocal(hit, ...vp.convertToViewportPoint(h.x0, h.y0))[0] })).filter(o => Math.abs(toLocal(hit, ...vp.convertToViewportPoint(o.h.x0, o.h.y0))[1]) < fh * 0.35 && o.lx >= pt.x - 0.3 && o.lx < pt.x + pt.w - 0.05).sort((p, q) => p.lx - q.lx);
+      if (gl.length === pch.length) gl.forEach((o, k) => pmap.set(o.h, pt.start + k));
+      else { const ns = pch.map((c, k) => (c.trim() ? k : -1)).filter(k => k >= 0), g2 = gl.filter(o => !o.h.space); if (g2.length === ns.length) g2.forEach((o, k) => pmap.set(o.h, pt.start + ns[k])); }
+    }
+    const byIdx = pmap.size ? (h => (pmap.has(h) ? pmap.get(h) : -1)) : hits.length === chs.length ? (h => hits.indexOf(h)) : glyphs.length === nonSp.length ? (h => nonSp[glyphs.indexOf(h)]) : null;
+    for (const h of glyphs) {
+      const [dx, dy] = vp.convertToViewportPoint((h.x0 + h.x1) / 2, (h.y0 + h.y1) / 2), lx = (toLocal(hit, dx, dy)[0] - start) / sx;
+      const ci = byIdx ? byIdx(h) : cb.findIndex(b => lx >= b.left && lx < b.left + b.width);
+      if (ci < 0 || !str[ci] || !str[ci].trim()) continue;
+      const s = {}, colr = hexC(h.color);
+      if (colr !== color) { s.fill = colr; if (g2) s.stroke = colr; }
+      if (gKey(h) !== mainKey) {
+        if (!!h.bold !== !!bold) s.fontWeight = h.bold ? 'bold' : 'normal';
+        if (!!h.italic !== !!italic) s.fontStyle = h.italic ? 'italic' : 'normal';
+        if (h.font !== g0.font && !isGenericFontName(h.font)) { const f2 = matchFamily(h.font); if (f2 && f2 !== family) { s.fontFamily = f2; ensureFontOption(f2); } }
+      }
+      if (Object.keys(s).length) st[ci] = s;
+    }
+    if (Object.keys(st).length) { t.styles = { 0: st }; t.initDimensions && t.initDimensions(); t.dirty = true; }
+  }
   if (sx !== 1) t.set({ scaleX: sx });
   const nch = [...str].length;
   if (nch > 2 && t.width > 0) {
@@ -2058,21 +2191,12 @@ async function editTextAt(v, pt) {
       if (inkNew) { const dx = inkOrig.left - inkNew.left, dy = inkOrig.base - inkNew.base; if (Math.abs(dx) < fs * 0.6) t.set({ left: t.left + dx }); if (Math.abs(dy) < fs * 0.4) t.set({ top: t.top + dy }); t.setCoords(); }
     } catch (e) { console.warn('ink', e); }
   }
+  if (inkRot) { try { const n = inkOfText(t); if (n) { const dx = inkRot.left - n.left, dy = inkRot.top - n.top; if (Math.hypot(dx, dy) < fs * 0.6) { t.set({ left: t.left + dx, top: t.top + dy }); t.setCoords(); } } } catch (e) { console.warn('ink', e); } }
+  try { alignCharsToGlyphs(t, hit, vp, hits, str, fs, !inkOrig && !inkRot, run.parts); } catch (e) { console.warn("alignChars", e); }
   // chữ sửa từ chữ gốc: cố định vị trí (không kéo lệch khi bấm / bôi đen)
   t.set({ lockMovementX: true, lockMovementY: true, hasControls: false });
   // chữ gốc vẽ kiểu "tô + viền" (Tr 2, hay dùng để làm đậm giả) → giữ nét viền cùng màu, cùng độ dày
-  const g2 = glyphs.find(h => h.mode === 2 && h.lw > 0);
   if (g2) t.set({ stroke: hexC(g2.strokeColor || g2.color), strokeWidth: Math.round(g2.lw * 1000) / 1000, paintFirst: 'fill', strokeLineJoin: 'round' });
-  if (multiColor) { // giữ màu riêng từng đoạn: hình chữ gốc nằm ở ô ký tự nào của dòng mới thì ký tự đó mang màu của nó
-    const cb = (t.__charBounds && t.__charBounds[0]) || [], st = {};
-    const start = align === 'left' ? x0 : align === 'center' ? (x0 + x1) / 2 - t.width * sx / 2 : x1 - t.width * sx;
-    for (const h of glyphs) {
-      const [dx, dy] = vp.convertToViewportPoint((h.x0 + h.x1) / 2, (h.y0 + h.y1) / 2), lx = (toLocal(hit, dx, dy)[0] - start) / sx;
-      const ci = cb.findIndex(b => lx >= b.left && lx < b.left + b.width);
-      const colr = hexC(h.color); if (ci >= 0 && colr !== color && str[ci] && str[ci].trim()) st[ci] = g2 ? { fill: colr, stroke: colr } : { fill: colr };
-    }
-    if (Object.keys(st).length) { t.styles = { 0: st }; t.dirty = true; }
-  }
   v.loading = true;
   if (!removed) fc.add(coverRect());
   fc.add(t); v.loading = false;
@@ -2112,7 +2236,13 @@ function inkMeasure(c, ox, oy, k) {
   const rowN = new Int32Array(H), colN = new Int32Array(W);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (ink(x, y)) { rowN[y]++; colN[x]++; }
   const rule = new Uint8Array(H), vrule = new Uint8Array(W);
-  for (let y = 0; y < H; y++) if (rowN[y] > W * 0.8) rule[y] = 1;
+  // hàng có đoạn mực liền dài hơn ~1,5 lần chiều cao vùng đo (≈ 2,5 lần cỡ chữ) = đường kẻ / gạch chân đường link, không phải nét chữ
+  const longRun = Math.max(8, H * 1.5);
+  for (let y = 0; y < H; y++) {
+    if (rowN[y] > W * 0.8) { rule[y] = 1; continue; }
+    let run = 0, mx = 0; for (let x = 0; x < W; x++) { if (ink(x, y)) { run++; if (run > mx) mx = run; } else run = 0; }
+    if (mx > longRun) rule[y] = 1;
+  }
   for (let x = 0; x < W; x++) if (colN[x] > H * 0.92) vrule[x] = 1;
   // mảng mực chạm mép vùng đo (vòng tròn chú thích quanh số, đường kẻ, khung… luôn chạy ra ngoài vùng đo) → không phải nét chữ
   const lab = new Int32Array(W * H), drop = new Uint8Array(W * H); let nid2 = 0;
@@ -2123,12 +2253,12 @@ function inkMeasure(c, ox, oy, k) {
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = qx + dx, ny = qy + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue; const n = ny * W + nx; if (!lab[n] && !rule[ny] && !vrule[nx] && ink(nx, ny)) { lab[n] = nid2; st.push(n); } } }
     if (edge) for (const q of px) drop[q] = 1;
   }
-  let left = -1, right = -1; const bot = new Int32Array(W).fill(-1);
-  for (let x = 0; x < W; x++) { if (vrule[x]) continue; for (let y = 0; y < H; y++) { if (rule[y] || drop[y * W + x] || !ink(x, y)) continue; if (left < 0) left = x; right = x; bot[x] = y; } }
+  let left = -1, right = -1, topY = H, botY = -1; const bot = new Int32Array(W).fill(-1);
+  for (let x = 0; x < W; x++) { if (vrule[x]) continue; for (let y = 0; y < H; y++) { if (rule[y] || drop[y * W + x] || !ink(x, y)) continue; if (left < 0) left = x; right = x; bot[x] = y; if (y < topY) topY = y; if (y > botY) botY = y; } }
   if (left < 0) return null;
   const cnt = new Map(); for (const b of bot) if (b >= 0) cnt.set(b, (cnt.get(b) || 0) + 1);
   let base = -1, best = 0; for (const [y, n] of cnt) if (n > best || (n === best && y > base)) { best = n; base = y; }
-  return { left: ox + left / k, right: ox + (right + 1) / k, base: oy + (base + 1) / k };
+  return { left: ox + left / k, right: ox + (right + 1) / k, base: oy + (base + 1) / k, top: oy + topY / k, bottom: oy + (botY + 1) / k };
 }
 async function inkOfPage(pg, box) {
   const k = INK_K, p = await getJsPage(pg), c = document.createElement('canvas');
@@ -2487,6 +2617,34 @@ fabric.Object.prototype.render = function (ctx) {
 };
 /* Chữ sửa trên bản scan (ocrBlur = độ nhoè, point): vẽ nhoè đúng như chữ trong ảnh scan cho khỏi "sắc" khác hẳn chữ xung quanh.
    Đang gõ thì vẽ nét rõ để dễ sửa. */
+/* Không co giãn cặp chữ (kerning): PDF đặt từng chữ theo đúng bề rộng của nó, không tự kerning như trình duyệt →
+   tắt kerning khi đo và khi vẽ để chữ sửa / chép ra trùng vị trí từng ký tự với chữ gốc (vd cặp "11" không bị khít lại) */
+(() => {
+  const gm = fabric.Text.prototype.getMeasuringContext;
+  fabric.Text.prototype.getMeasuringContext = function () { const c = gm.call(this); if (c && 'fontKerning' in c) c.fontKerning = 'none'; return c; };
+  const sf = fabric.Text.prototype._setTextStyles;
+  fabric.Text.prototype._setTextStyles = function (ctx, charStyle, forMeasuring) { sf.call(this, ctx, charStyle, forMeasuring); if (ctx && 'fontKerning' in ctx) ctx.fontKerning = 'none'; };
+  /* dx: khoảng dịch riêng của từng ký tự (thuộc tính kiểu của ký tự, đơn vị = đơn vị chữ trước khi giãn ngang) — đặt từng ký tự
+     đúng vị trí ký tự gốc trong PDF (PDF có thể giãn khoảng trắng, căn chỉnh từng chữ…, một độ giãn chung không khớp được) */
+  const gb = fabric.Text.prototype._getGraphemeBox;
+  fabric.Text.prototype._getGraphemeBox = function (grapheme, lineIndex, charIndex, prevGrapheme, skipLeft) {
+    const box = gb.call(this, grapheme, lineIndex, charIndex, prevGrapheme, skipLeft);
+    const st = this.styles && this.styles[lineIndex] && this.styles[lineIndex][charIndex];
+    if (st && st.dx) { box.width += st.dx; box.kernedWidth += st.dx; }
+    return box;
+  };
+  // ký tự có dx phải vẽ riêng (không gộp chung 1 lần vẽ với ký tự sau, kẻo trình duyệt tự xếp theo bề rộng phông)
+  const hsc = fabric.Text.prototype._hasStyleChanged;
+  fabric.Text.prototype._hasStyleChanged = function (a, b) { return hsc.call(this, a, b) || !!(a && a.dx) || ((a && a.dx) || 0) !== ((b && b.dx) || 0); };
+  // gõ thêm chữ: chữ mới KHÔNG kế thừa dx của chữ bên cạnh (giữ khoảng cách bình thường)
+  const ics = fabric.IText.prototype.insertCharStyleObject;
+  fabric.IText.prototype.insertCharStyleObject = function (lineIndex, charIndex, quantity, copiedStyle) {
+    const r = ics.call(this, lineIndex, charIndex, quantity, copiedStyle);
+    const ls = this.styles && this.styles[lineIndex];
+    if (ls) for (let k = charIndex; k < charIndex + (quantity || 1); k++) if (ls[k] && ls[k].dx) { delete ls[k].dx; if (!Object.keys(ls[k]).length) delete ls[k]; }
+    return r;
+  };
+})();
 const _textRender = fabric.IText.prototype._render;
 fabric.IText.prototype._render = function (ctx) {
   if (!this.ocrBlur || this.isEditing || !('filter' in ctx)) return _textRender.call(this, ctx);
@@ -2699,11 +2857,14 @@ async function itemFontCheck(v, a, base) {
     if (x1 - x0 < 3 || y1 - y0 < 3) return null;
     const cw = x1 - x0 + 1, ch = y1 - y0 + 1, crop = new Uint8ClampedArray(cw * ch * 4);
     for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) { const q = (y + y0) * W + x + x0, o = (y * cw + x) * 4, val = keep[q] ? Math.min(d[q * 4], d[q * 4 + 1], d[q * 4 + 2]) : 255; crop[o] = crop[o + 1] = crop[o + 2] = val; crop[o + 3] = 255; }
-    const st = ocrStyle(text, crop, cw, ch, 384, null, base.family);
+    window.__ocrExtra = shapeExtra(); let st; try { st = ocrStyle(text, crop, cw, ch, 384, null, base.family); } finally { window.__ocrExtra = null; }
     if (!st || !st.family) return null;
     const stBase = st.base || st.family;
     const baseOf = f => { for (const [b0, arr] of Object.entries(OCR_WEIGHTS)) if (arr.includes(f)) return b0; return f; };
-    if (stBase === baseOf(base.family)) return null; // cùng họ phông với cả cụm → giữ như cũ
+    if (stBase === baseOf(base.family)) { // cùng họ phông với cả cụm: chỉ đổi nếu độ đậm khác (vd "FULLY ASSEMBLED" thường trong cụm chữ đậm)
+      if (!!st.bold !== !!base.bold && st.family === base.family) return { family: base.family, bold: st.bold, italic: base.italic };
+      return null;
+    }
     return { family: st.family, bold: st.bold, italic: st.italic };
   } catch (e) { console.warn('itemFontCheck', e); return null; }
 }
@@ -2728,7 +2889,7 @@ async function fontByShape(v, T, fontName) {
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i] + d[i + 1] + d[i + 2] < thr) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
     if (x1 - x0 < 4 || y1 - y0 < 4) continue;
     const cw = x1 - x0 + 1, ch = y1 - y0 + 1, crop = ctx.getImageData(x0, y0, cw, ch).data;
-    const st = ocrStyle(a.it.str.trim(), crop, cw, ch, thr, null);
+    window.__ocrExtra = shapeExtra(); let st; try { st = ocrStyle(a.it.str.trim(), crop, cw, ch, thr, null); } finally { window.__ocrExtra = null; }
     if (!st || !st.family) continue;
     const wgt = [...a.it.str.replace(/\s/g, '')].length; // dòng dài đáng tin hơn
     votes[st.family] = (votes[st.family] || 0) + wgt; bolds.push([st.bold, wgt]); itals.push([st.italic, wgt]);
@@ -2742,9 +2903,9 @@ async function fontByShape(v, T, fontName) {
     const named = {};
     for (const a of T.items) { if (!a.it.str.trim() || a.it.fontName === fontName) continue; let n = ''; try { n = T.p.commonObjs.get(a.it.fontName).name || ''; } catch (e) {} if (!n || isGenericFontName(n)) continue; const f = matchFamily(n); if (f) named[f] = (named[f] || 0) + 1; }
     // ứng viên: phông đoán theo hình dạng + phông có tên cùng trang (được ưu tiên nhẹ) + các phông thông dụng
-    const common = OCR_FONTS.concat(['Segoe UI Semibold', 'Arial Narrow', 'Century Gothic', 'Trebuchet MS', 'Georgia']).filter(f => FONTS.byNorm.has(normFam(f)) || OCR_FONTS.includes(f));
+    const common = OCR_FONTS.concat(['Segoe UI Semibold'], shapeExtra()).filter(f => FONTS.byNorm.has(normFam(f)) || OCR_FONTS.includes(f));
     const cands = [...new Set([...Object.keys(votes), ...Object.keys(named), ...common])];
-    const mc = document.createElement('canvas').getContext('2d'), wsum = samples.reduce((s, a) => s + [...a.it.str.replace(/\s/g, '')].length, 0);
+    const mc = document.createElement('canvas').getContext('2d'); if ('fontKerning' in mc) mc.fontKerning = 'none'; const wsum = samples.reduce((s, a) => s + [...a.it.str.replace(/\s/g, '')].length, 0);
     const err = (f, b) => { let e = 0; for (const a of samples) { mc.font = `${b ? 'bold ' : ''}${a.fh}px "${f}"`; const w = mc.measureText(a.it.str).width; if (!(w > 0)) return 9; e += Math.abs(Math.log(a.w / w)) * [...a.it.str.replace(/\s/g, '')].length; } return e / Math.max(1, wsum); };
     for (const f of cands) await ensureFaceLoaded(f);
     let best = null;
@@ -2896,12 +3057,23 @@ async function drawObj(out, page, o, ctx) {
         }
         // nhiều đoạn (màu riêng từng đoạn / ký tự cần phông dự phòng): vẽ từng đoạn đúng vị trí ký tự như trên màn hình
         if (!fb && !gs.every(has)) fb = await getFont(out, ctx.fonts, 'Arial', isB, isI);
-        const fbChars = fb && fb.getCharacterSet ? new Set(fb.getCharacterSet()) : null;
         const cb = (o.__charBounds && o.__charBounds[i]) || [], left = -o.width / 2 + (o._getLineLeftOffset ? o._getLineLeftOffset(i) : 0);
+        // phông riêng từng ký tự: kiểu riêng (đậm / nghiêng / phông khác, vd "(Seller):" nghiêng sau chữ đậm) → phông tương ứng;
+        // ký tự phông đó không có → phông dự phòng
+        const fontsAt = [];
+        for (let q = 0; q < gs.length; q++) {
+          const s2 = st[q] || {}, fam = s2.fontFamily || o.fontFamily, fw = s2.fontWeight != null ? s2.fontWeight : o.fontWeight, fst = s2.fontStyle != null ? s2.fontStyle : o.fontStyle;
+          let f = (fam === o.fontFamily && fw === o.fontWeight && fst === o.fontStyle) ? font : await getFont(out, ctx.fonts, fam, fw === 'bold' || +fw >= 600, fst === 'italic');
+          const fset = f === font ? chars : (f.getCharacterSet ? new Set(f.getCharacterSet()) : null);
+          if (fset && !fset.has(gs[q].codePointAt(0))) { if (!fb) fb = await getFont(out, ctx.fonts, 'Arial', isB, isI); f = fb; }
+          fontsAt.push(f);
+        }
+        const fbChars = fb && fb.getCharacterSet ? new Set(fb.getCharacterSet()) : null;
         let j = 0;
         while (j < gs.length) {
-          const f0 = has(gs[j]) ? font : fb, c0 = (st[j] && st[j].fill) || o.fill; let k = j, s = '';
-          while (k < gs.length && (has(gs[k]) ? font : fb) === f0 && ((st[k] && st[k].fill) || o.fill) === c0) {
+          const f0 = fontsAt[j], c0 = (st[j] && st[j].fill) || o.fill; let k = j, s = '';
+          // tách đoạn sau ký tự có dx (vị trí riêng) để ký tự kế tiếp được đặt đúng chỗ như màn hình
+          while (k < gs.length && fontsAt[k] === f0 && ((st[k] && st[k].fill) || o.fill) === c0 && (k === j || !(st[k - 1] && st[k - 1].dx))) {
             s += f0 === fb && fbChars && !fbChars.has(gs[k].codePointAt(0)) ? '?' : gs[k]; k++;
           }
           const fc2 = col(c0) || fill;
