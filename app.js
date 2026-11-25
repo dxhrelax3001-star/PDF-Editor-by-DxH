@@ -88,7 +88,7 @@ async function repairFonts(bytes) {
   let doc; try { doc = await PDFLib.PDFDocument.load(bytes.slice(), { ignoreEncryption: false, updateMetadata: false }); } catch (e) { return bytes; }
   const ctx = doc.context, N = n => PDFLib.PDFName.of(n), fixed = [];
   const okFont = d => { const h = ((d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3]) >>> 0; return h === 0x00010000 || h === 0x74727565 || h === 0x4F54544F || h === 0x74746366; };
-  const ttf = {}; const getTtf = async file => ttf[file] || (ttf[file] = fetch('fonts/f/' + file).then(r => r.ok ? r.arrayBuffer() : null).then(b => b && fontkit.create(new Uint8Array(b))).catch(() => null));
+  const ttf = {}; const getTtf = async file => ttf[file] || (ttf[file] = fontFileBytes(file).then(b => b && fontkit.create(new Uint8Array(b))).catch(() => null));
   for (const [, obj] of ctx.enumerateIndirectObjects()) {
     if (!(obj instanceof PDFLib.PDFDict) || String(obj.get(N('Subtype'))) !== '/Type0') continue;
     const desc = ctx.lookup(obj.get(N('DescendantFonts'))); const cid = desc && ctx.lookup(desc.get ? desc.get(0) : null);
@@ -2768,19 +2768,19 @@ const normFam = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
    nên trình duyệt phải nạp qua FontFace mới vẽ được */
 const webFaces = new Map();
 function registerWebFaces() {
-  for (const f of FONTS.list) if (f.web && !webFaces.has(f.file)) {
-    try { const ff = new FontFace(f.family, `url(fonts/f/${encodeURIComponent(f.file)})`, { weight: f.bold ? '700' : '400', style: f.italic ? 'italic' : 'normal' }); document.fonts.add(ff); webFaces.set(f.file, ff); } catch (e) {}
+  for (const f of FONTS.list) if (f.web && !webFaces.has(f.family + '|' + f.file)) {
+    try { const ff = new FontFace(f.family, `url(fonts-extra/${encodeURIComponent(f.file)})`, { weight: f.bold ? '700' : '400', style: f.italic ? 'italic' : 'normal' }); document.fonts.add(ff); webFaces.set(f.family + '|' + f.file, ff); } catch (e) {}
   }
 }
 async function ensureFaceLoaded(fam) { // chờ phông tải xong trước khi đo / vẽ chữ
-  const fs2 = FONTS.list.filter(f => f.web && f.family === fam).map(f => webFaces.get(f.file)).filter(Boolean);
+  const fs2 = FONTS.list.filter(f => f.web && f.family === fam).map(f => webFaces.get(f.family + '|' + f.file)).filter(Boolean);
   if (fs2.length) await Promise.all(fs2.map(ff => ff.load().catch(() => null)));
 }
 /* phông trong PDF chưa có trên máy → hỏi máy chủ tải từ Google Fonts (nếu là phông miễn phí có ở đó) */
 const webTried = new Map();
 async function webFontFor(pdfName) {
   const raw = (pdfName || '').replace(/^[A-Z]{6}\+/, ''), base = raw.split(/[-,]/)[0].replace(/(PSMT|PS|MT)$/, '').replace(/(Bold|Italic|Oblique|Regular|SemiBold|Semibold|Light|Medium|Black|Condensed|Thin|ExtraBold)+$/, '');
-  if (!base || base.length < 3) return null;
+  if (!base || base.length < 3 || FONTS.server === false) return null; // web tổng (trang tĩnh): không có máy chủ tải phông
   const spaced = base.replace(/([a-z])([A-Z0-9])/g, '$1 $2').replace(/([A-Z])([A-Z][a-z])/g, '$1 $2').replace(/_/g, ' ').trim();
   for (const name of [...new Set([spaced, base])]) {
     if (!/^[A-Za-z0-9][A-Za-z0-9 ]{1,48}$/.test(name)) continue;
@@ -2790,8 +2790,102 @@ async function webFontFor(pdfName) {
   }
   return null;
 }
+/* Web tổng (dxh3001.pages.dev) là trang TĨNH — không có máy chủ đọc phông Windows / tải Google Fonts:
+   - phông miễn phí: đọc fonts-extra/manifest.json, tải thẳng file trong fonts-extra/
+   - phông cài trên máy người dùng: Chrome/Edge cho đọc file phông (Local Font Access, hỏi quyền 1 lần ở lần bấm chuột đầu)
+     → nhúng đúng phông khi xuất PDF (kể cả SimSun trong .ttc)
+   - chưa cho quyền / trình duyệt khác: dò tên phông bằng cách đo chữ (vẫn HIỂN THỊ đúng phông máy),
+     khi xuất PDF thay bằng phông miễn phí cùng bề rộng chữ: Arial→Arimo, Times New Roman→Tinos, Courier New→Cousine */
+const WIN_FONTS = ['Arial', 'Arial Black', 'Arial Narrow', 'Bahnschrift', 'Book Antiqua', 'Bookman Old Style', 'Calibri', 'Calibri Light', 'Cambria', 'Cambria Math', 'Candara', 'Century', 'Century Gothic', 'Comic Sans MS', 'Consolas', 'Constantia', 'Corbel', 'Courier New', 'Ebrima', 'Franklin Gothic Medium', 'Gabriola', 'Gadugi', 'Garamond', 'Georgia', 'Impact', 'Leelawadee UI', 'Lucida Console', 'Lucida Sans Unicode', 'Malgun Gothic', 'Microsoft JhengHei', 'Microsoft Sans Serif', 'Microsoft YaHei', 'MingLiU', 'MS Gothic', 'MS Mincho', 'MS PGothic', 'MV Boli', 'Nirmala UI', 'NSimSun', 'Palatino Linotype', 'PMingLiU', 'Segoe Print', 'Segoe Script', 'Segoe UI', 'Segoe UI Black', 'Segoe UI Light', 'Segoe UI Semibold', 'Segoe UI Semilight', 'Segoe UI Symbol', 'SimHei', 'SimSun', 'Sitka Text', 'Sylfaen', 'Symbol', 'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Webdings', 'Wingdings', 'Yu Gothic', 'Helvetica', 'Times', 'Courier'];
+const STATIC_SUB = [[/courier|mono|consol|lucida ?console|code/i, 'Cousine'], [/times|roman|serif|georgia|cambria|garamond|antiqua|bookman|palatino|minion|constantia|century$|sitka|song|mincho|ming|sylfaen/i, 'Tinos']];
+const subFamily = fam => (STATIC_SUB.find(([re]) => re.test(fam || '')) || [0, 'Arimo'])[1];
+function hasSysFont(fam) { // phông có cài trên máy? (đo chữ: khác phông dự phòng → có)
+  const c = hasSysFont.c || (hasSysFont.c = document.createElement('canvas').getContext('2d')), t = 'mmmmmmmmmmlli1WQ@#ẫ漢字';
+  for (const g of ['monospace', 'serif', 'sans-serif']) { c.font = `72px ${g}`; const w0 = c.measureText(t).width; c.font = `72px "${fam}", ${g}`; if (c.measureText(t).width !== w0) return true; }
+  return false;
+}
+function grabLocalFonts() { // phải gọi ngay trong lúc người dùng bấm chuột (trình duyệt mới cho hỏi quyền)
+  try { return window.queryLocalFonts().then(fds => { if (fds && fds.length) { FONTS.lfds = fds; return true; } return false; }).catch(() => false); } catch (e) { return Promise.resolve(false); }
+}
+async function initLocalFonts() {
+  if (!window.queryLocalFonts || FONTS.lfInit) return; FONTS.lfInit = true;
+  let st = 'prompt'; try { st = (await navigator.permissions.query({ name: 'local-fonts' })).state; } catch (e) {}
+  if (st === 'granted') { await grabLocalFonts(); return; }
+  if (st === 'denied') return;
+  const once = () => { removeEventListener('pointerdown', once, true); grabLocalFonts().then(ok => { if (ok) loadFontList(); }); };
+  addEventListener('pointerdown', once, true);
+}
+function lfEntries(fds) {
+  const out = [], seen = new Set();
+  for (const fd of fds) {
+    const st = fd.style || 'Regular', italic = /italic|oblique/i.test(st), core = st.replace(/\s*(italic|oblique)\s*/ig, ' ').trim(), bold = /^bold$/i.test(core);
+    const family = !core || /^(regular|normal|roman|book|bold)$/i.test(core) ? fd.family : `${fd.family} ${core}`;
+    const file = 'lf:' + String(fd.postscriptName || family + st).toLowerCase(); if (seen.has(file)) continue; seen.add(file);
+    out.push({ family, bold, italic, file, lf: fd });
+  }
+  return out;
+}
+async function staticFontList() {
+  const list = [];
+  try { const m = await (await fetch('fonts-extra/manifest.json')).json(); for (const [family, rec] of Object.entries(m.families || {})) for (const f of rec.files || []) list.push({ family, bold: f.bold, italic: f.italic, file: f.file.toLowerCase(), web: true, weight: f.weight }); } catch (e) {}
+  const webFams = new Set(list.map(f => f.family)), sysFams = new Set();
+  if (FONTS.lfds) { for (const e of lfEntries(FONTS.lfds)) { if (webFams.has(e.family)) continue; list.push(e); sysFams.add(e.family); } }
+  else for (const fam of WIN_FONTS) if (!webFams.has(fam) && hasSysFont(fam)) { sysFams.add(fam); for (const k of [0, 1, 2, 3]) list.push({ family: fam, bold: !!(k & 1), italic: !!(k & 2), file: `sys:${fam.toLowerCase()}|${k}`, sys: true }); }
+  // máy không có Arial / Times New Roman / Courier New (điện thoại, Mac…) → mượn phông miễn phí cùng bề rộng dưới đúng tên đó
+  for (const [fam, sub] of [['Arial', 'Arimo'], ['Times New Roman', 'Tinos'], ['Courier New', 'Cousine']]) if (!sysFams.has(fam))
+    for (const f of list.filter(x => x.web && x.family === sub)) list.push({ ...f, family: fam });
+  return list;
+}
+/* TTC (vd simsun.ttc) → tách đúng phông con thành TTF độc lập để nhúng (giống ttcExtract ở server.js) */
+function ttcPick(buf, psName) {
+  const d = new DataView(buf), u8 = new Uint8Array(buf), tag = o => String.fromCharCode(u8[o], u8[o + 1], u8[o + 2], u8[o + 3]);
+  if (tag(0) !== 'ttcf') return buf;
+  const n = d.getUint32(8), faces = []; let pick = 0;
+  for (let i = 0; i < n; i++) {
+    const off = d.getUint32(12 + i * 4), nt = d.getUint16(off + 4), recs = [];
+    for (let t = 0; t < nt; t++) { const r = off + 12 + t * 16; recs.push({ r, tag: tag(r), sum: d.getUint32(r + 4), o: d.getUint32(r + 8), l: d.getUint32(r + 12) }); }
+    faces.push({ off, nt, recs });
+    const nm = recs.find(x => x.tag === 'name'); if (!nm || !psName) continue;
+    const o = nm.o, cnt = d.getUint16(o + 2), so = o + d.getUint16(o + 4);
+    for (let k = 0; k < cnt; k++) {
+      const r = o + 6 + k * 12; if (d.getUint16(r + 6) !== 6) continue;
+      const pid = d.getUint16(r), len = d.getUint16(r + 8), s0 = so + d.getUint16(r + 10); let s = '';
+      if (pid === 3 || pid === 0) for (let q = 0; q < len; q += 2) s += String.fromCharCode(d.getUint16(s0 + q)); else for (let q = 0; q < len; q++) s += String.fromCharCode(u8[s0 + q]);
+      if (s === psName) { pick = i; break; }
+    }
+  }
+  const f = faces[pick], head = 12 + f.nt * 16; let size = head; for (const r of f.recs) size += (r.l + 3) & ~3;
+  const out = new Uint8Array(size), od = new DataView(out.buffer); out.set(u8.subarray(f.off, f.off + 12), 0); let p = head;
+  f.recs.forEach((r, t) => { const q = 12 + t * 16; out.set(u8.subarray(r.r, r.r + 4), q); od.setUint32(q + 4, r.sum); od.setUint32(q + 8, p); od.setUint32(q + 12, r.l); out.set(u8.subarray(r.o, r.o + r.l), p); p += (r.l + 3) & ~3; });
+  return out.buffer;
+}
+/* dữ liệu file phông để nhúng vào PDF (máy chủ: /fonts/f/…; web tổng: fonts-extra / phông máy / phông thay thế) */
+async function fontFileBytes(file) {
+  if (FONTS.ready) await FONTS.ready;
+  if (FONTS.server) { const r = await fetch('fonts/f/' + encodeURIComponent(file)); return r.ok ? r.arrayBuffer() : null; }
+  const find = (fam, b, i, pred = () => true) => { const all = FONTS.list.filter(x => x.family === fam && pred(x)); return all.find(x => x.bold === b && x.italic === i) || all.find(x => x.bold === b) || all.find(x => !x.bold && !x.italic) || all[0]; };
+  let e = FONTS.list.find(x => x.file === file);
+  const wm = !e && /^arial(bd|i|bi)?\.ttf$/.exec(file);
+  if (wm) { const b = /b/.test(wm[1] || ''), i = /i/.test(wm[1] || ''); e = find('Arial', b, i) || { family: 'Arial', bold: b, italic: i }; }
+  if (e && e.lf) { try { return ttcPick(await (await e.lf.blob()).arrayBuffer(), e.lf.postscriptName); } catch (err) { console.warn('phông máy', err); } }
+  if (e && e.web) { const r = await fetch('fonts-extra/' + encodeURIComponent(e.file)); if (r.ok) return r.arrayBuffer(); }
+  const s = find(subFamily(e && e.family), !!(e && e.bold), !!(e && e.italic), x => x.web);
+  if (s) { const r = await fetch('fonts-extra/' + encodeURIComponent(s.file)); if (r.ok) return r.arrayBuffer(); }
+  return null;
+}
+async function fetchFontList() {
+  if (FONTS.server !== false) {
+    try { const r = await fetch('fonts/list'); if (r.ok && /json/i.test(r.headers.get('content-type') || '')) { FONTS.server = true; return await r.json(); } } catch (e) {}
+    if (FONTS.server) return [];
+    FONTS.server = false;
+  }
+  await initLocalFonts();
+  return staticFontList();
+}
 async function loadFontList() {
-  try { FONTS.list = await (await fetch('fonts/list')).json(); } catch (e) { FONTS.list = []; }
+  let done = null; if (!FONTS.ready) FONTS.ready = new Promise(r => (done = r));
+  try { FONTS.list = await fetchFontList(); } catch (e) { FONTS.list = []; }
+  if (done) done();
   FONTS.loadedAt = Date.now();
   registerWebFaces();
   FONTS.fams = [...new Set(FONTS.list.map(f => f.family))].sort((a, b) => a.localeCompare(b));
@@ -2928,7 +3022,7 @@ async function getFont(out, cache, fam, bold, italic) {
   const file = pickFontFile(fam, bold, italic);
   if (cache[file]) return cache[file];
   try {
-    if (!fontBytes[file]) { const r = await fetch(`fonts/f/${encodeURIComponent(file)}`); if (!r.ok) throw new Error('font ' + r.status); fontBytes[file] = await r.arrayBuffer(); }
+    if (!fontBytes[file]) { const b = await fontFileBytes(file); if (!b) throw new Error('font ' + file); fontBytes[file] = b; }
     try { cache[file] = await out.embedFont(fontBytes[file], { subset: true }); }
     catch (e) { cache[file] = await out.embedFont(fontBytes[file]); }
   } catch (e) {
